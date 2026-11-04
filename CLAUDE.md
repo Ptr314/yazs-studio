@@ -25,6 +25,9 @@ python studio/verify.py test_fx          плеер в eCat3 против мод
 python studio/brun.py                    запуск из «Быстропускалки» и BRUN из ДОС, выход (~7 с)
 python studio/sid/test_cpu.py            только процессор конвертера SID (~30 с)
 python studio/listen.py m5_synth --mp3   WAV/MP3, уровни, запас тика, потерянные тики
+python studio/yztext.py файл.yz|модуль|файл.yzt     текстовый вид .YZ туда и обратно (docs/text-format.md)
+python studio/yzdisk.py диск.dsk --add файл.yzt      мелодия на готовый диск без AS65 (--extract, --delete)
+python studio/play.py файл.yzt --disk диск.dsk       мелодия в ОКОННОМ eCat3 (окно на экране владельца)
 python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск для отладки
 ```
 

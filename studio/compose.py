@@ -63,7 +63,10 @@ def bload_length(data):
 
 class Instrument(object):
     def __init__(self, name, label, reg, reg_loop=0xFF, rel=None, arp=None, arp_loop=0xFF,
-                 pitch=None, pitch_loop=0xFF, vib=(0, 0, 0), detune=0, meter=(12, 8, 6)):
+                 pitch=None, pitch_loop=0xFF, vib=(0, 0, 0), detune=0, meter=(12, 8, 6),
+                 rel_loop=0xFF, flags=0):
+        """label - строка или готовые коды экрана (bytes); rel_loop и flags -
+        для текстового вида (yztext.py), партитуры их не задают"""
         self.name = name
         self.label = label
         self.reg = list(reg)
@@ -72,6 +75,8 @@ class Instrument(object):
             # Отпустить: полосы и D3 те же, огибающая снята
             rel = [self.reg[-1] & 0x0F]
         self.rel = list(rel)
+        self.rel_loop = rel_loop
+        self.flags = flags
         self.arp = list(arp) if arp else None
         self.arp_loop = arp_loop
         self.pitch = list(pitch) if pitch else None
@@ -82,7 +87,7 @@ class Instrument(object):
 
     def encode(self):
         out = bytearray(tables.agat(self.label, 8))
-        out += bytes([0, self.vib[0], self.vib[1], self.vib[2], self.detune & 0xFF])
+        out += bytes([self.flags, self.vib[0], self.vib[1], self.vib[2], self.detune & 0xFF])
         hdr = len(out)                # смещения макросов: 13..16
         out += bytes(4)
         out += bytes([(self.meter[0] << 4) | self.meter[1], self.meter[2]])
@@ -92,7 +97,7 @@ class Instrument(object):
             out.extend([len(vals), loop] + [v & 0xFF for v in vals])
             return pos
         out[hdr] = macro(self.reg, self.reg_loop)
-        out[hdr + 1] = macro(self.rel, 0xFF)
+        out[hdr + 1] = macro(self.rel, self.rel_loop)
         out[hdr + 2] = macro(self.arp, self.arp_loop) if self.arp else 0
         out[hdr + 3] = macro(self.pitch, self.pitch_loop) if self.pitch else 0
         assert len(out) < 256, self.name
@@ -327,7 +332,9 @@ class Song(object):
         if bounds[0] != 0 or any(not 0 < b - a <= 255 for a, b in zip(bounds, bounds[1:])):
             raise ValueError("кадры: строки начала с 0, длина кадра 1-255")
         self.bounds = bounds
-        keys = [sorted(self.rows[ch]) for ch in range(8)]
+        # Пустые строки (extend() снял отпускание) байтов не дают: иначе лишний
+        # конец строки, которого не видно в текстовом виде (yztext.py)
+        keys = [sorted(r for r, c in self.rows[ch].items() if c) for ch in range(8)]
         patterns = []
         pindex = {}
         order = []
@@ -483,7 +490,7 @@ class Song(object):
             k = keys[ch]
             cmd_rows = [r - a for r in k[bisect.bisect_left(k, a):bisect.bisect_left(k, a + rows)]]
         else:
-            cmd_rows = sorted(r - a for r in self.rows[ch] if a <= r < a + rows)
+            cmd_rows = sorted(r - a for r, c in self.rows[ch].items() if c and a <= r < a + rows)
         cmd_rows_set = set(cmd_rows)
         r = 0
         # Строка 0 всегда начинает паттерн (хотя бы концом строки)

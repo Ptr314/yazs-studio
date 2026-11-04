@@ -5,7 +5,7 @@
 играет ее на скорости MAX и пишет WAV, потом - громкость по секундам, пики,
 тишина, потерянные тики, по желанию MP3.
 
-    python studio/listen.py имя_модуля|файл.yz [--mp3] [--out каталог]
+    python studio/listen.py имя_модуля|файл.yz|файл.yzt [--mp3] [--out каталог]
 """
 
 import argparse
@@ -22,9 +22,11 @@ import render
 
 
 def make_disk(module, outdir):
-    """Диск с одной мелодией: модуль score/ или готовый файл .yz. (образ, сводка, имя)"""
-    if module.lower().endswith(".yz") and os.path.isfile(module):
-        data = open(module, "rb").read()
+    """Диск с одной мелодией: модуль score/, готовый файл .yz или текстовый вид
+    .yzt (yztext.py). (образ, сводка, имя)"""
+    if module.lower().endswith((".yz", ".yzt")) and os.path.isfile(module):
+        import yztext
+        data = yztext.load(module)
         stem = os.path.splitext(os.path.basename(module))[0].replace(".", "_")
         ver, main, blocks = compose.yz_info(data)
         info = {"bytes": len(data), "seconds": data[64] | (data[65] << 8), "version": ver,

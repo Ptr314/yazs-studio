@@ -83,17 +83,34 @@ GFX = {"bar1": 0x01, "bar2": 0x02, "bar3": 0x03,
 
 
 def agat(text, width=None, upper=False):
-    """Строка в коды экрана; width - дополнить пробелами или обрезать"""
-    if upper:
-        text = text.upper()
-    out = bytearray()
-    for ch in text:
-        if ch not in AGAT:
-            raise ValueError("нет знака %r в наборе Агата" % ch)
-        out.append(AGAT[ch])
+    """Строка в коды экрана; width - дополнить пробелами или обрезать.
+    bytes - уже коды экрана, берутся как есть"""
+    if isinstance(text, (bytes, bytearray)):
+        out = bytearray(text)
+    else:
+        if upper:
+            text = text.upper()
+        out = bytearray()
+        for ch in text:
+            if ch not in AGAT:
+                raise ValueError("нет знака %r в наборе Агата" % ch)
+            out.append(AGAT[ch])
     if width is not None:
         out = out[:width] + bytes([0xA0]) * max(0, width - len(out))
     return bytes(out)
+
+
+# Обратная таблица: код экрана -> знак (Ё читается как Е)
+FROM_AGAT = {}
+for _ch, _code in AGAT.items():
+    if _ch not in "Ёё":
+        FROM_AGAT.setdefault(_code, _ch)
+
+
+def from_agat(data):
+    """Коды экрана -> список знаков; у кода без знака (псевдографика и пр.) -
+    None: как его записать, решает вызывающий (yztext.py пишет \\xNN)"""
+    return [FROM_AGAT.get(b) for b in data]
 
 
 def name_dos(text):

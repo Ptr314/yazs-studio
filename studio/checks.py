@@ -3,7 +3,8 @@
 """
 Все проверки проекта одним запуском:
 1. партитуры собираются в те же байты, что записаны в tests/scores.md5 (правка
-   compose.py или инструментов не должна молча менять мелодии);
+   compose.py или инструментов не должна молча менять мелодии); текстовый вид
+   (yztext.py): каждая .YZ -> текст -> .YZ байт в байт, и блюз в v2 с блоками;
 2. test_v2: каждая партитура в v1 и в v2 с блоками дает в модели (pyplay) те же
    записи в ячейку;
 3. процессор конвертера SID - тесты Дормана (sid/test_cpu.py, ~30 с);
@@ -17,7 +18,6 @@
     --update  записать новые суммы партитур (после намеренной правки)
 """
 
-import glob
 import hashlib
 import os
 import subprocess
@@ -26,24 +26,32 @@ import sys
 import build
 import render
 import test_v2
+import yztext
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUMS = os.path.join(build.ROOT, "tests", "scores.md5")
+modules = yztext.score_modules
 
 
-def modules():
-    out = []
-    for p in sorted(glob.glob(os.path.join(HERE, "score", "*.py"))):
-        m = os.path.splitext(os.path.basename(p))[0]
-        if m not in ("common", "instruments") and not m.startswith("data_"):
-            out.append(m)
-    return out
+def check_text(datas):
+    """Текстовый вид: .YZ -> текст -> .YZ байт в байт"""
+    s = build.load_score("m4_blues")
+    s.version, s.main_limit = 2, 300
+    files = dict(datas, **{"m4_blues (v2, блоки)": s.build()})
+    bad = []
+    for m, data in files.items():
+        err = yztext.roundtrip(data)
+        if err:
+            bad.append("%s: %s" % (m, err))
+    print("[1] текстовый вид: %d файлов туда и обратно, расхождений %d" % (len(files), len(bad)))
+    for line in bad:
+        print("    " + line)
+    return not bad
 
 
-def check_sums(update):
-    got = {}
-    for m in modules():
-        got[m] = hashlib.md5(build.load_score(m).build()).hexdigest()
+def check_sums(update, datas):
+    """datas - {партитура: байты .YZ}"""
+    got = {m: hashlib.md5(d).hexdigest() for m, d in datas.items()}
     if update or not os.path.exists(SUMS):
         os.makedirs(os.path.dirname(SUMS), exist_ok=True)
         with open(SUMS, "w", encoding="utf-8") as f:
@@ -70,7 +78,9 @@ def run(cmd):
 
 def main():
     quick = "--quick" in sys.argv
-    ok = check_sums("--update" in sys.argv)
+    datas = {m: build.load_score(m).build() for m in modules()}
+    ok = check_sums("--update" in sys.argv, datas)
+    ok &= check_text(datas)
     bad = sum(not test_v2.check(m) for m in modules())
     print("[2] v1/v2 на модели: расхождений %d" % bad)
     ok &= bad == 0

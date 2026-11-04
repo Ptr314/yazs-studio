@@ -19,6 +19,10 @@
   до ~88 КБ.
 - **Компилятор партитур** (`studio/compose.py`): MML по тактам, инструменты, ударные, темп, свинг,
   подписи на экране.
+- **Текстовый вид `.YZ`** (`studio/yztext.py`, `docs/text-format.md`): любую мелодию можно разобрать
+  в сетку по кадрам, как на экране трекера, поправить в редакторе текста и собрать обратно. Мелодии
+  на готовом диске плеера дописываются и заменяются без AS65 (`studio/yzdisk.py`), слушать правку -
+  в окне eCat3 с плеером (`studio/play.py`).
 - **Партитуры** (`studio/score/`):
   - «Симфония А-Г-А-Т» в шести частях и «тур по тембрам» - диск `yazs-player.dsk` в библиотеке eCat3;
   - пьесы в разных стилях (буги, диско, джаз-мануш);
@@ -45,6 +49,9 @@ python studio/build.py --set classics   переложения классики 
 python studio/build.py --set demo       «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk
 python studio/listen.py m5_synth --mp3  одна мелодия: WAV/MP3 на скорости MAX, уровни, запас тика
 python studio/listen.py файл.yz --mp3   то же для готового .yz
+python studio/yztext.py файл.yz         .yz -> текст файл.yzt; файл.yzt -> обратно (docs/text-format.md)
+python studio/play.py файл.yzt --disk dist/yazs-player.dsk    мелодия в окне eCat3, клавиши плеера
+python studio/yzdisk.py диск.dsk --add файл.yzt               на готовый диск, без AS65
 python studio/sid2yz.py мелодия.sid     мелодия C64 -> .yz (docs/SID.md)
 python studio/checks.py                 все проверки (docs/development.md)
 ```
@@ -71,9 +78,11 @@ python studio/checks.py                 все проверки (docs/developmen
 | Файл | О чем |
 |---|---|
 | `docs/FORMAT.md` | формат `.YZ` версий 1 и 2 |
+| `docs/text-format.md` | текстовый вид `.YZ`: правка мелодии без редактора |
 | `docs/player.md` | плеер: диск, запуск из «Быстропускалки» и ДОС, управление, память, загрузка, движок, работа на настоящей машине |
 | `docs/card.md` | ЯЗС 5/2: регистры, огибающие, уровни, ударные, особенности платы, модель в eCat3, источники |
 | `docs/composing.md` | язык партитуры, приемы и грабли, импорт нот |
+| `docs/effects.md` | как сделан каждый эффект: высота, огибающая, полосы, время, несколько каналов, ударные; пределы |
 | `docs/music.md` | каталог мелодий, источники нот, права |
 | `docs/SID.md` | перевод мелодий SID: что переносится точно, приближенно и никак |
 | `docs/ecat3.md` | связь с eCat3: эмулятор, MCP для отладки, тест и диск в библиотеке eCat3 |

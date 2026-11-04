@@ -12,7 +12,8 @@
     python studio/build.py --only m2_adagio --disk x.dsk     только эти партитуры
     python studio/build.py --to-ecat3          и копия в eCat3: library/agat/yazs-player.dsk/.hfe
 
-Ключи: --out каталог (промежуточное: player.bin, .lst, .yz), --extra модуль, --no-hfe.
+Ключи: --out каталог (промежуточное: player.bin, .lst, .yz), --extra модуль, --no-hfe,
+--add файл.yz|файл.yzt (готовая мелодия или текстовый вид, yztext.py).
 """
 
 import argparse
@@ -233,6 +234,8 @@ def main():
                                    "yazs-classics.dsk или yazs-demo.dsk)")
     ap.add_argument("--only", action="append", help="только эти партитуры (имя модуля)")
     ap.add_argument("--extra", action="append", default=[], help="добавить модуль score/ на диск")
+    ap.add_argument("--add", action="append", default=[],
+                    help="добавить на диск готовую мелодию: файл .yz или текстовый вид .yzt")
     ap.add_argument("--no-hfe", action="store_true")
     ap.add_argument("--to-ecat3", action="store_true",
                     help="скопировать диск и .hfe в eCat3: library/agat/yazs-player.*")
@@ -270,6 +273,14 @@ def main():
         print("  %-30s %5d байт, v%d, %3d кадров, %3d паттернов, %d:%02d, speed %d, N %d" % (
             fname, st["bytes"], st["version"], st["frames"], st["patterns"], st["seconds"] // 60,
             st["seconds"] % 60, st["speed"], st["n"]))
+    for path in a.add:
+        import yzdisk
+        import yztext
+        data = yzdisk.song_data(path)
+        fname = yzdisk.disk_name(path)
+        yzdisk.put_song(disk, fname, data)
+        total += data[64] | (data[65] << 8)
+        print("  %-30s %s (из %s)" % (fname, yztext.summary(data), path))
     print("всего %d:%02d" % (total // 60, total % 60))
 
     os.makedirs(os.path.dirname(os.path.abspath(disk_path)), exist_ok=True)
