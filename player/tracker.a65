@@ -63,6 +63,12 @@ td_1        sta (zt),y
             lda #lo(s_playhelp)
             ldy #hi(s_playhelp)
             jsr print64
+            ldx #1
+            ldy #32
+            jsr at64
+            lda #lo(s_playhelp2)
+            ldy #hi(s_playhelp2)
+            jsr print64
             lda #$FF
             sta trkframe
             sta trkframeh

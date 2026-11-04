@@ -469,7 +469,8 @@ dl_down     jmp putc
 ; Файл sel. Повтор из заголовка (D0 флагов) по умолчанию выключен: мелодия
 ; кончается на последнем кадре. R в режиме одного файла включает и выключает
 ; повтор (rept): с кадром повтора - с него, без - файл заново после отзвука.
-; ПРОБЕЛ - следующий файл; режим повтора у него снова выключен
+; ПРОБЕЛ - следующий файл, ВВЕРХ - предыдущий; режим повтора у них снова
+; выключен. ВЛЕВО/ВПРАВО - кадр назад и вперед
 play_file   lda #0
             sta rept
             jsr clrscr
@@ -496,11 +497,7 @@ play_file   lda #0
             lda #0
             sta playall
             rts
-pf_ok       jsr eng_start
-            lda loopf           ; повтор из заголовка - до R
-            sta hloop
-            lda loopfh
-            sta hlooph
+pf_ok       jsr eng_start       ; кадр повтора заголовка - в hloop, действует только с R
             jsr set_loop
             lda #1
             sta playing
@@ -527,7 +524,7 @@ pl_k1       cmp #KEY_SPACE
             jsr draw_play
             jmp pl_nokey
 pl_k2       cmp #KEY_RIGHT
-            bne pl_k3
+            bne pl_k2b
             lda frame
             clc
             adc #1
@@ -536,6 +533,22 @@ pl_k2       cmp #KEY_RIGHT
             adc #0
             sta jumph
             jmp pl_nokey
+pl_k2b      cmp #KEY_LEFT       ; ВЛЕВО (и Backspace - тот же $88): предыдущий кадр
+            bne pl_k2c
+            lda frame
+            sec
+            sbc #1
+            tax
+            lda frameh
+            sbc #0
+            bcs pl_kj
+            lda #0              ; с кадра 0 - его начало
+            tax
+pl_kj       stx jump
+            sta jumph
+            jmp pl_nokey
+pl_k2c      cmp #KEY_UP         ; ВВЕРХ - предыдущий файл
+            beq pl_prev
 pl_k3       cmp #KEY_R
             beq pl_rep
             cmp #KEY_R2
@@ -548,11 +561,12 @@ pl_rep      lda playall         ; повтор - только у одного ф
             jsr set_loop
             jsr show_rept
 pl_nokey    lda ended
-            beq pl_loop
+            beq pl_more
             lda tail
             cmp #100
-            bcc pl_loop
-            ; конец: с R - заново, подряд - следующий, иначе в меню
+            bcs pl_over
+pl_more     jmp pl_loop         ; мостик: цикл длиннее короткого перехода
+pl_over     ; конец: с R - заново, подряд - следующий, иначе в меню
             lda rept
             beq pl_end
             jsr card_silence
@@ -571,6 +585,16 @@ pl_next     lda #0
             bcc pl_n1
             lda #0
 pl_n1       sta sel
+            jmp play_file
+pl_prev     lda #0              ; предыдущий файл, с первого - последний
+            sta playing
+            jsr card_silence
+            lda sel
+            bne pl_p1
+            lda nfiles
+pl_p1       sec
+            sbc #1
+            sta sel
             jmp play_file
 
 ; Кадр повтора движку: из заголовка, если повтор включен, иначе нет ($FF)
@@ -625,8 +649,6 @@ sr_t1       jmp print64
 sr_r        rts
 
 rept        db 0                ; 1 - повтор включен (R)
-hloop       db 0                ; кадр повтора из заголовка ($FF - нет)
-hlooph      db 0
 
 ; Неизменная часть экрана воспроизведения
 draw_play   lda view
@@ -716,6 +738,12 @@ dp_ch       stx t0
             jsr at
             lda #lo(s_playhelp)
             ldy #hi(s_playhelp)
+            jsr print
+            ldx #29
+            ldy #0
+            jsr at
+            lda #lo(s_playhelp2)
+            ldy #hi(s_playhelp2)
             jsr print
             ; все показанное - заново
             ldx #7

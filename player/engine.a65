@@ -42,7 +42,11 @@ es_v2       lda YZ+80
             sta loopf
             lda YZ+83
             sta loopfh
-es_noloop   jsr map_main
+es_noloop   lda loopf           ; кадр повтора заголовка (loopf включает интерфейс, R)
+            sta hloop
+            lda loopfh
+            sta hlooph
+            jsr map_main
             ldx #0
 es_ptr      lda YZ+70,x         ; смещения таблиц -> адреса
             sta ordp,x
@@ -116,9 +120,21 @@ es_ch       lda #0
             jmp load_frame
 
 ; --- Кадр A (младший) / Y (старший): число строк, указатели и банки паттернов ---
+; Вход в кадр повтора заголовка - запомнить время (ltime): при повторе оно
+; вернется, и часы покажут место в мелодии, а не бесконечный счет
 load_frame  sta frame
             sty frameh
-            jsr frame_ptr
+            cmp hloop
+            bne lf_nl
+            cpy hlooph
+            bne lf_nl
+            ldx #3              ; secacc (2) и secs (2) идут подряд
+lf_t        lda secacc,x
+            sta ltime,x
+            dex
+            bpl lf_t
+            lda frame
+lf_nl       jsr frame_ptr
             ldy #0
             lda (zt),y
             sta frows
@@ -346,6 +362,11 @@ et_jmp      ldx #$FF
 et_over     lda loopfh
             cmp #$FF
             beq et_end
+            ldx #3              ; время - как при первом входе в кадр повтора
+et_lt       lda ltime,x
+            sta secacc,x
+            dex
+            bpl et_lt
             lda loopf
             ldy loopfh
 et_lf       jmp load_frame
@@ -369,6 +390,10 @@ et_tt1      jsr tone_tick
             bne et_tt
             inc tail
             rts
+
+hloop       db 0                ; кадр повтора из заголовка ($FF - нет)
+hlooph      db 0
+ltime       ds 4                ; secacc и secs при входе в кадр повтора
 
 ; Секунды: каждый тик N / 7980 секунды
 count_secs  lda secacc
