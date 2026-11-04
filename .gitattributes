@@ -1,0 +1,11 @@
+# Текст - с LF и в репозитории, и в рабочей копии, при любом core.autocrlf
+* text=auto eol=lf
+
+# Двоичные
+*.exe binary
+*.dsk binary
+*.hfe binary
+*.bin binary
+*.png binary
+*.wav binary
+*.mp3 binary

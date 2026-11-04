@@ -1,0 +1,15 @@
+# Собранное и промежуточное
+dist/
+out/
+__pycache__/
+*.wav
+*.mp3
+
+# Внешние материалы: схемы, записи, чужие диски и ноты (docs/external.md)
+docs-external/
+
+# Локальное
+.idea/
+.vscode/
+.claude/
+*.log
