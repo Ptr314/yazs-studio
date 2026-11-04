@@ -86,7 +86,7 @@ def run(lines, name, outdir, timeout=900, exe=None):
     os.makedirs(outdir, exist_ok=True)
     exe = exe or find_exe()
     path = os.path.join(outdir, name + ".ecat")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     wd = workdir(outdir)
     stamped = re.compile(re.escape(name) + r"-\d{4}(-\d{2}){5}\.log$")

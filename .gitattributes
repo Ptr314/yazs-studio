@@ -1,5 +1,5 @@
-# Текст - с LF и в репозитории, и в рабочей копии, при любом core.autocrlf
-* text=auto eol=lf
+# Текст: в репозитории LF, в рабочей копии - родные окончания (на Windows CRLF)
+* text=auto
 
 # Двоичные
 *.exe binary

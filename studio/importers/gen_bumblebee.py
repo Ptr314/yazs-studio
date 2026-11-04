@@ -110,7 +110,7 @@ def main():
            "CH[0] = %r" % mel_text, "CH[1] = %r" % ch1, "CH[2] = %r" % ch2,
            "CH[3] = %r" % ch3, "CH[4] = %r" % ch4]
     path = os.path.join(YP, "score", "data_bumblebee.py")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
     print(path, bars, "тактов", len(mel), "нот")
 

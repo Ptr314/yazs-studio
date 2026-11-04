@@ -44,7 +44,7 @@ def check_sums(update):
         got[m] = hashlib.md5(build.load_score(m).build()).hexdigest()
     if update or not os.path.exists(SUMS):
         os.makedirs(os.path.dirname(SUMS), exist_ok=True)
-        with open(SUMS, "w", encoding="utf-8", newline="\n") as f:
+        with open(SUMS, "w", encoding="utf-8") as f:
             for m, h in got.items():
                 f.write("%s  %s.yz\n" % (h, m))
         print("[1] суммы партитур записаны: %d" % len(got))

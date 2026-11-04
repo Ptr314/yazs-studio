@@ -114,9 +114,9 @@ def gen_sources():
                  (41, "ТОН 5"), (51, "Б6"), (56, "Т7")):
         cols[x:x + len(s)] = tables.agat(s)
     lines += db_lines("s_trkcols", list(cols.rstrip(b"\xa0")) + [0])
-    with open(os.path.join(PLAYER, "gen_tables.a65"), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(PLAYER, "gen_tables.a65"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    with open(os.path.join(PLAYER, "gen_const.a65"), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(PLAYER, "gen_const.a65"), "w", encoding="utf-8") as f:
         f.write("; Сгенерировано build.py - не править\n")
 
 

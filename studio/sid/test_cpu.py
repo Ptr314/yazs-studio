@@ -51,7 +51,7 @@ def nmos_decimal(tmp):
     src = os.path.join(tmp, "dec_nmos.a65")
     text = open(os.path.join(TESTS, "6502_decimal_test.a65"), encoding="latin-1").read()
     text = text.replace("cputype = 1 ", "cputype = 0 ", 1)
-    open(src, "w", encoding="latin-1", newline="\n").write(text)
+    open(src, "w", encoding="latin-1").write(text)
     subprocess.run([AS65, "-l", "-m", "-s2", "-w", "-h0", "dec_nmos.a65"], cwd=tmp,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     hexp = os.path.join(tmp, "dec_nmos.hex")

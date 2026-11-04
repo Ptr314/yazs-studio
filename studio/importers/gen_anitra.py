@@ -36,7 +36,7 @@ def main():
     tri = [(int(round(n[0] * RPB)), int(round((n[0] + n[1]) * RPB)), 0) for n in tracks[8][1]]
     out.append("TRIANGLE = %r" % [r for r, _, _ in tri])
     path = os.path.join(YP, "score", "data_anitra.py")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
     print(path, bars, "тактов")
 

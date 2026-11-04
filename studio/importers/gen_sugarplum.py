@@ -54,7 +54,7 @@ def main():
         out.append("CH[%d] = %r" % (ch, text))
         print("канал %d: %d нот" % (ch, len(ev)))
     path = os.path.join(YP, "score", "data_sugarplum.py")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
     print(path, bars, "тактов")
 
