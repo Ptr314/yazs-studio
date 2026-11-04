@@ -8,7 +8,9 @@
    записи в ячейку;
 3. процессор конвертера SID - тесты Дормана (sid/test_cpu.py, ~30 с);
 4. плеер на 6502 в эмуляторе против модели (verify.py): test_fx (все команды
-   и эффекты, v1) и блюз в v2 с паттернами в блоке. Нужен eCat3 (docs/ecat3.md).
+   и эффекты, v1) и блюз в v2 с паттернами в блоке. Нужен eCat3 (docs/ecat3.md);
+5. запуск плеера из «Быстропускалки» и по BRUN из ДОС, выход к запустившему
+   (brun.py). Нужен еще системный диск ИКП из eCat3.
 
     python studio/checks.py [--quick] [--update]
     --quick   только 1-2 (без эмулятора и тестов процессора)
@@ -91,6 +93,17 @@ def main():
                 code, text = run(["verify.py", src, "60", "331"])
                 last = [l for l in text.splitlines() if l.startswith("снимков")]
                 print("[4] плеер против модели, %s: %s" % (os.path.basename(src), last[-1] if last else text[-500:]))
+                ok &= code == 0
+            import brun
+            if not os.path.exists(brun.IKP):
+                print("[5] пропущено: нет системного диска ИКП", brun.IKP)
+            else:
+                code, text = run(["brun.py"])
+                bad = [l.strip() for l in text.splitlines() if "ОШИБКА" in l]
+                last = [l for l in text.splitlines() if l.startswith("запуск и выход")]
+                print("[5] %s" % (last[-1] if last else "запуск и выход: " + text[-500:]))
+                for l in bad:
+                    print("    " + l)
                 ok &= code == 0
     print("ВСЕ ПРОВЕРКИ ПРОШЛИ" if ok else "ЕСТЬ ОШИБКИ")
     sys.exit(0 if ok else 1)

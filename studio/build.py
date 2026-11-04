@@ -178,14 +178,15 @@ def song_body(data):
     return mkdisk840.b_body(SONG_ADDR, data, compose.bload_length(data))
 
 
-def blank_disk(player):
+def blank_disk(player, name="ЯЗС-ПЛЕЕР"):
     """Шаблон 840 КБ (дорожка 0 и ДОС) с плеером - первым и единственным защищенным
-    файлом: его «Быстропускалка» и запускает (или BRUN из ДОС). player - assemble()"""
+    файлом: его «Быстропускалка» и запускает (или BRUN из ДОС). player - assemble();
+    name - имя файла плеера (brun.py берет латинское: его набирает сценарий)"""
     disk = mkdisk840.Disk840(open(TEMPLATE, "rb").read())
     if any(n == "SOUNDTEST" for _, n, _ in disk.listing()):
         disk.delete("SOUNDTEST")              # исходный soundtest.DSK вместо шаблона
     disk.set_volume("ЯЗС-ПЛЕЕР")
-    disk.add("ЯЗС-ПЛЕЕР", mkdisk840.T_BIN, player[1], locked=True)
+    disk.add(name, mkdisk840.T_BIN, player[1], locked=True)
     return disk
 
 

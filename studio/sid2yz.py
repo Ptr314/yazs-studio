@@ -132,7 +132,7 @@ def main():
 
 def make_disks(results, a):
     """Диск с плеером и мелодиями. Не помещаются в каталог шаблона (35 записей, одна -
-    плеер) или в список плеера (MAXFILES = 48) - несколько дисков ОБРАЗ-1, ОБРАЗ-2...:
+    плеер) или в список плеера (MAXFILES = 40) - несколько дисков ОБРАЗ-1, ОБРАЗ-2...:
     мелодии одного SID-файла по возможности на одном диске"""
     import build
     import mkdisk840
@@ -149,7 +149,7 @@ def make_disks(results, a):
             groups.append((src, []))
         groups[-1][1].append((n, data))
     template = mkdisk840.Disk840(open(build.TEMPLATE, "rb").read())
-    per = min(7 * len(template.catalog_sectors()) - 1, 48)
+    per = min(7 * len(template.catalog_sectors()) - 1, 40)      # 40 - MAXFILES в player.a65
     disks = [[]]
     for _, g in groups:
         for i in range(0, len(g), per):

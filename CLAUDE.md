@@ -18,10 +18,11 @@
 
 ```
 python studio/checks.py --quick          суммы партитур и v1/v2 на модели (секунды)
-python studio/checks.py                  + процессор SID и плеер в eCat3 против модели (~40 с)
+python studio/checks.py                  + процессор SID, плеер в eCat3 против модели, запуск из ДОС (~40 с)
 python studio/checks.py --update         записать суммы после намеренной правки музыки
 python studio/test_v2.py m4_blues        v1/v2 на модели - одна партитура
 python studio/verify.py test_fx          плеер в eCat3 против модели - одна мелодия
+python studio/brun.py                    запуск из «Быстропускалки» и BRUN из ДОС, выход (~7 с)
 python studio/sid/test_cpu.py            только процессор конвертера SID (~30 с)
 python studio/listen.py m5_synth --mp3   WAV/MP3, уровни, запас тика, потерянные тики
 python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск для отладки
@@ -38,8 +39,8 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
 - **Новая пьеса:** модуль в `score/`, строка в `SONGS` (симфония) или `COLLECTION` в `build.py`,
   `checks.py --update` (в отчете она «новая»), статус прав - `docs/music.md`.
 - **`build.py`:**
-  1. `tables.py` и строки интерфейса -> `player/gen_tables.a65`, `gen_const.a65`. Они
-     перезаписываются каждой сборкой: руками не править.
+  1. `tables.py` и строки интерфейса -> `player/gen_tables.a65`, `gen_const.a65` (после сборки
+     тела - еще `gen_loader.a65`). Они перезаписываются каждой сборкой: руками не править.
   2. AS65 собирает `player/player.a65` (включает `engine`, `disk`, `ui` -> `tracker`) в плеер с
      `$1800`, листинг - `out/build/player.lst`. Перед телом - `loader.a65`: файл `ЯЗС-ПЛЕЕР`
      грузится с `$4000`, загрузчик кладет тело на `$1800` (так же работает BRUN из ДОС,
@@ -90,9 +91,11 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   5. если поле новое, `compose.py`.
 
   Новые эффекты - в `score/test_fx.py`.
-- **`studio/checks.py`** - после любой правки `compose.py`, инструментов, движка. Суммы партитур
-  (`tests/scores.md5`) не должны меняться молча: v1 собирается байт в байт. Если `eCat3-headless` не
-  найден, шаг [4] пропускается, а итог все равно «ВСЕ ПРОВЕРКИ ПРОШЛИ»: смотреть строку [4].
+- **`studio/checks.py`** - после любой правки `compose.py`, инструментов, движка и плеера
+  (вход, выход, память - шаг [5], `brun.py`). Суммы партитур (`tests/scores.md5`) не должны
+  меняться молча: v1 собирается байт в байт. Если `eCat3-headless` не найден, шаги [4] и [5]
+  пропускаются (без диска ИКП eCat3 - только [5]), а итог все равно «ВСЕ ПРОВЕРКИ ПРОШЛИ»: смотреть
+  строки [4] и [5].
 - **Версия 1 формата не меняется** (старые файлы на дисках). Новое - через версию в заголовке.
   `compose.py` пишет самую младшую подходящую версию.
 - **AS65:**
@@ -111,8 +114,8 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   - `+F = $C0` в начале и на выходе;
   - чужие слоты не читать;
   - `$D000+` не трогать;
-  - при ДОС (BRUN) не трогать `$0300-$05FF`, `$0600-$0FFF` и страницу `$18` - только с
-    сохранением, банки 8-15 - нет;
+  - при ДОС (BRUN): `$0300-$05FF` и банки 8-15 не трогать, `$0600-$0FFF` и страницу `$18` - только
+    с сохранением;
   - выход - к запустившему: RTS в «Быстропускалку», теплый перезапуск ДОС `JMP $03D0`
     (`docs/player.md`).
 
@@ -127,4 +130,6 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
 - **Диск библиотеки eCat3** (`library/agat/yazs-player.dsk`) и тест `work-agat-9-yazs-player`:
   - `studio/build.py --to-ecat3`, затем тест в eCat3 (`docs/ecat3.md`);
   - эталоны перезаписываются там, коммит - в eCat3;
+  - тест писался под выход в монитор: с нынешним выходом (к «Быстропускалке») его последний шаг
+    надо переписать (`docs/ecat3.md`);
   - модель ячейки - код eCat3, правится по правилам его `CLAUDE.md`.
