@@ -7,6 +7,7 @@
 
     python studio/build.py                     симфония (диск библиотеки eCat3) -> dist/yazs-player.dsk
     python studio/build.py --set all           симфония и все пьесы -> dist/yazs-collection.dsk
+    python studio/build.py --set classics      переложения классики -> dist/yazs-classics.dsk
     python studio/build.py --only m2_adagio --disk x.dsk     только эти партитуры
     python studio/build.py --to-ecat3          и копия в eCat3: library/agat/yazs-player.dsk/.hfe
 
@@ -56,7 +57,17 @@ COLLECTION = [
     ("entertainer", "ДЖОПЛИН.ENTERTAINER.YZ"),
     ("littlebrownjug", "LITTLE BROWN JUG.YZ"),
     ("ritz", "PUTTIN ON THE RITZ.YZ"),
+    ("vivaldi_spring", "ВИВАЛЬДИ.ВЕСНА.YZ"),
+    ("vivaldi_summer", "ВИВАЛЬДИ.ЛЕТО.YZ"),
+    ("vivaldi_autumn", "ВИВАЛЬДИ.ОСЕНЬ.YZ"),
+    ("vivaldi_winter", "ВИВАЛЬДИ.ЗИМА.YZ"),
+    ("flowers", "ЧАЙКОВСКИЙ.ВАЛЬС ЦВЕТОВ.YZ"),
 ]
+
+# Диск классики (--set classics -> dist/yazs-classics.dsk): переложения из COLLECTION
+# по времени написания
+CLASSICS = ["vivaldi_spring", "vivaldi_summer", "vivaldi_autumn", "vivaldi_winter",
+            "mountainking", "solveig", "anitra", "sugarplum", "flowers", "bumblebee"]
 
 STRINGS = {
     "s_header": " ЯЗС-ПЛЕЕР     АГАТ-9 + ЯЗС 5/2 ",
@@ -190,10 +201,11 @@ def load_score(name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", choices=("symphony", "all"), default="symphony",
-                    help="symphony - диск библиотеки eCat3, all - и все пьесы")
+    ap.add_argument("--set", choices=("symphony", "all", "classics"), default="symphony",
+                    help="symphony - диск библиотеки eCat3, all - и все пьесы, classics - классика")
     ap.add_argument("--out", default=os.path.join(OUT, "build"))
-    ap.add_argument("--disk", help="образ (по умолчанию dist/yazs-player.dsk или yazs-collection.dsk)")
+    ap.add_argument("--disk", help="образ (по умолчанию dist/yazs-player.dsk, yazs-collection.dsk "
+                                   "или yazs-classics.dsk)")
     ap.add_argument("--only", action="append", help="только эти партитуры (имя модуля)")
     ap.add_argument("--extra", action="append", default=[], help="добавить модуль score/ на диск")
     ap.add_argument("--no-hfe", action="store_true")
@@ -201,14 +213,19 @@ def main():
                     help="скопировать диск и .hfe в eCat3: library/agat/yazs-player.*")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    disk_path = a.disk or os.path.join(DIST, "yazs-player.dsk" if a.set == "symphony" else "yazs-collection.dsk")
+    disk_path = a.disk or os.path.join(DIST, {"symphony": "yazs-player.dsk", "all": "yazs-collection.dsk",
+                                              "classics": "yazs-classics.dsk"}[a.set])
 
     gen_sources()
     player = assemble(a.out)
     print("плеер: %d байт, $%04X-$%04X" % (len(player), PLAYER_ADDR, PLAYER_ADDR + len(player) - 1))
     disk = blank_disk(player)
 
-    songs = SONGS + (COLLECTION if a.set == "all" else [])
+    if a.set == "classics":
+        names = dict(COLLECTION)
+        songs = [(m, names[m]) for m in CLASSICS]
+    else:
+        songs = SONGS + (COLLECTION if a.set == "all" else [])
     songs = [s for s in songs if not a.only or s[0] in a.only]
     songs += [(m, m.upper().replace("_", "-") + ".YZ") for m in a.extra]
     total = 0

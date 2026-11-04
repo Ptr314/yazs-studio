@@ -374,3 +374,65 @@ def shuffle(text, drums=False, rpb=3):
         out.append(head + ln + dot)
     return " ".join(out)
 
+
+# --- струнный оркестр барокко (data_vivaldi_*, importers/gen_vivaldi.py) ---
+
+# Роль канала: (регистр без D4, вибрато (задержка, скорость, глубина), расстройка, индикатор)
+# Скрипки - без ВЧ: на СЧ+ВЧ звук пронзительный (центр спектра C6 ~2 кГц, 23% энергии
+# выше 3 кГц), одна СЧ при той же громкости - ~1.1 кГц и 1% (measure.py)
+BAROQUE = {
+    "solo": (0x20 | 0x08 | 0x02, (14, 5, 2), 0, (14, 12, 1)),           # D3, СЧ
+    "vln1": (0x20 | 0x02, (16, 5, 2), 1, (11, 10, 1)),                  # СЧ, хорус с соло
+    "vln2": (0x20 | 0x02, (16, 5, 2), -1, (10, 9, 1)),                  # СЧ
+    "viola": (0x20 | 0x04 | 0x02, (18, 4, 2), 0, (10, 9, 1)),           # НЧ+СЧ
+    "basso": (0x20 | 0x08 | 0x04, (0, 0, 0), 0, (13, 11, 2)),           # D3, НЧ
+}
+BAROQUE_ROLES = ["solo", "vln1", "vln2", "viola", "basso"]
+BAROQUE_NAMES = {"solo": "СОЛО", "vln1": "СКРИП.1", "vln2": "СКРИП.2", "viola": "АЛЬТЫ",
+                 "basso": "ВИОЛОНЧ."}
+PIANO = ("piano", "più piano", "pianissimo", "piano e larghetto")
+FORTE = ("forte", "allegro molto", "allegro assai")
+
+
+def baroque_strings(song, D, trem=8):
+    """Пять голосов струнного концерта из data_vivaldi_*: соло, скрипки I и II,
+    альты, виолончель с органом -> каналы 1-5. Инструменты - только те, что
+    упомянуты в нотах (@роль, @роль_t1/_t2 - трель с верхней соседней на 1/2
+    полутона, @роль_m1/_m2 - мордент, @роль_r32 - тремоло: повторный удар раз в
+    trem тиков). Удар D4 - только в первый тик: на быстрых нотах слышна каждая.
+    Piano в партии снимает D3 (BUS) у соло и баса; Forte (у соло и Solo, Tutti)
+    возвращает."""
+    from compose import CMD_FX, EFFECTS
+    used = set()
+    for ch in range(5):
+        used |= set(re.findall(r"@(\w+)", D.CH0[ch] + " " + D.CH[ch]))
+    for name in sorted(used):
+        role, _, var = name.partition("_")
+        reg, vib, det, meter = BAROQUE[role]
+        kw = dict(vib=vib, detune=det, meter=meter)
+        regs = [reg | 0x10, reg]
+        if var[:1] == "t":                  # трель: с верхней ноты, по 5 тиков
+            d = int(var[1:])
+            kw["arp"], kw["arp_loop"] = [d] * 5 + [0] * 5, 0
+        elif var[:1] == "m":                # мордент: нота, нижняя, нота
+            kw["arp"] = [0] * 3 + [-int(var[1:])] * 3 + [0]
+        elif var[:1] == "r":                # тремоло: D4 = 0 на тик - новый удар
+            regs, kw["reg_loop"] = [reg | 0x10] + [reg] * (trem - 1), 0
+        song.instrument(name, BAROQUE_NAMES[role], regs, **kw)
+    total = D.PICKUP + D.BARS * song.bar_rows
+    for ch in range(5):
+        if D.PICKUP:
+            song.voice(ch, D.CH0[ch], octave=4, length=4)
+        end = song.voice(ch, D.CH[ch], start=D.PICKUP, octave=4, length=4)
+        assert end == total, (ch, end, total)
+    for row, ch, txt in D.LABELS:
+        reg = BAROQUE[BAROQUE_ROLES[ch]][0]
+        txt = txt.lower()
+        if not reg & 0x08:
+            continue
+        if txt in PIANO:
+            song.put(ch, row, (CMD_FX + EFFECTS["bus"], reg & 0x07))
+        elif txt in FORTE or (ch == 0 and txt in ("solo", "tutti")):
+            song.put(ch, row, (CMD_FX + EFFECTS["bus"], 0xFF))
+    return total
+

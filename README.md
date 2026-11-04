@@ -39,6 +39,7 @@ AS65 (Win32) лежит в `third_party/as65`.
 ```
 python studio/build.py                  диск симфонии -> dist/yazs-player.dsk и .hfe
 python studio/build.py --set all        симфония и все пьесы -> dist/yazs-collection.dsk
+python studio/build.py --set classics   переложения классики -> dist/yazs-classics.dsk
 python studio/listen.py m5_synth --mp3  одна мелодия: WAV/MP3 на скорости MAX, уровни, запас тика
 python studio/listen.py файл.yz --mp3   то же для готового .yz
 python studio/sid2yz.py мелодия.sid     мелодия C64 -> .yz (docs/SID.md)

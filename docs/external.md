@@ -16,6 +16,11 @@
 | `notes-sources/anitra-mutopia/` | Танец Анитры, Mutopia № 281: MIDI целиком и по партиям | mutopiaproject.org |
 | `notes-sources/IMSLP624090-...pdf` | Песня Сольвейг, ор. 23, C.F. Peters | imslp.org (скачивается вручную: проверка JavaScript) |
 | `notes-sources/ritz.pdf` | Puttin' on the Ritz, первое издание 1929 года | скан издания (скачан с разрешения пользователя) |
+| `notes-sources/IMSLP57454-PMLP03607-Tchaikovsky_op71_Nutcracker_(pf).pdf` | сюита из «Щелкунчика», ор. 71a, переложение для фортепиано, Jurgenson 1892; Вальс цветов - с. 28-37 | imslp.org (скачан пользователем, ноябрь 2026) |
+| `notes-sources/nut7wltz.mid` | Вальс цветов, MIDI фортепианного переложения (R. J. Stratton, Jr.), 389 тактов; местами расходится с изданием Jurgenson (октавные удвоения баса, другая хроматика) | положен пользователем; только для сверки (`gen_flowers.py --compare`) |
+| `notes-sources/Waltz-Of-The-Flowers.mid` | сокращенная аранжировка Вальса цветов (68 тактов, фа мажор, GM, без выравнивания) | положен пользователем; не используется |
+| `notes-sources/flowers/` | расшифровка сканов клавира (с. 28-37) в тексте, формат - `FORMAT.txt`; источник нот для `gen_flowers.py` | своя (ноты издания в общественном достоянии) |
+| `notes-sources/vivaldi/<сезон>/` | «Времена года», ор. 8 № 1-4: `<сезон>-mids.zip` и `<сезон>-lys.zip` с распаковкой (MIDI частей и партии LilyPond), наборы Mutopia № 301, 336, 350, 351 (CC BY-SA 3.0) | mutopiaproject.org/ftp/VivaldiA/O8/ (скачаны с разрешения пользователя, ноябрь 2026) |
 
 Чего здесь нет, но может понадобиться (ссылки - в `docs/card.md` и `docs/roadmap.md`):
 - записи демо НКЛ с живой платы (agatcomp.ru/agat/Hardware/SoundNCL/SoftNCL/DemoNCL/);
