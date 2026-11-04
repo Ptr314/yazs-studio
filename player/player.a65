@@ -17,17 +17,30 @@ SONGLD      equ $3EFC           ; сюда грузится тело B-файл�
 YZ          equ $3F00           ; начало .YZ; смещения файла + YZ = адреса
 SONGTOP     equ $C0             ; страница, выше которой мелодия не помещается
 ; .YZ v2: блоки по 8 КБ - в банках 8-15 (верхние 64 КБ ОЗУ), видны в окне
-; сегмента 5. Диспетчер памяти: запись в $C1SB - сегменту S банк B
+; сегмента 5; при ДОС блоков нет - в этих банках она и ее буферы. Диспетчер
+; памяти: запись в $C1SB - сегменту S банк B
 WINDOW      equ $A000
 WINPG       equ $A0             ; страницы окна $A0-$BF (hi() в AS65 берет все выражение)
 WINEND      equ $C0
 MAPWIN      equ $C150           ; + банк: окно $A000-$BFFF на этот банк
 MAINBANK    equ 5               ; свой банк сегмента 5 (основная память)
-ZPSAVE      equ $0400
-BUF         equ $0800           ; сектор каталога
-TSBUF       equ $0900           ; список T/S
-DIRTAB      equ $0A00           ; 48 файлов по 32 байта: дорожка и сектор списка, имя
-MAXFILES    equ 48
+; Резидентная часть ДОС (запуск по BRUN) - $0300-$0FFF: векторы $03D0-$03FF,
+; заглушки $0400-$04FF, таблица ЧЗТС $0557, код $0600-$0FFF (его вызывает ДОС
+; из банков 8-9). $0300-$05FF плеер не трогает; $0600-$0FFF при ДОС на время
+; работы переносится в DOSSAVE, у «Быстропускалки» там остатки загрузчика
+ZPSAVE      equ $0600
+BUF         equ $0700           ; сектор каталога
+TSBUF       equ $0800           ; список T/S
+DIRTAB      equ $0B00           ; 40 файлов по 32 байта: дорожка и сектор списка, имя
+MAXFILES    equ 40
+DOSVEC      equ $03D0           ; ДОС: JMP $048B
+DOSTAB      equ $0557           ; таблица ЧЗТС: тип $01, слот * 16, привод, том, дорожка, сектор
+; Основная память Бейсика-А9: страница $1800-$18FF - его переходники (их зовут и
+; Бейсик, и ДОС), программа - с $1901. Файл ЯЗС-ПЛЕЕР грузится с $4000
+; (loader.a65): загрузчик кладет страницу $18 в SAVE18 и тело плеера - на $1800
+SAVE18      equ $B500           ; копия $1800-$18FF (ставит loader.a65)
+DOSSAVE     equ $B600           ; копия $0600-$0FFF при ДОС (10 страниц, до $BFFF)
+DOSSAVEPG   equ $B5             ; мелодия при ДОС - ниже этой страницы
 
 ; --- Нулевая страница (вся сохраняется и восстанавливается) ---
 zt          equ $02             ; указатели
@@ -119,76 +132,112 @@ lmainpg     equ $83             ; загрузка: страница конца 
 lblk        equ $84             ; загрузка: банк блока, который грузится (0 - основная часть)
 lblkend     equ $85             ; загрузка: банк после последнего блока
 
-; --- Переменные каналов ($0500-$07FF) ---
-c_ins       equ $0500           ; по 8 байт: каналы 0-4 (тоны), 5-6 ударные
-c_pend      equ $0508
-c_pnote     equ $0510
-c_pins      equ $0518
-c_delay     equ $0520
-c_cut       equ $0528
-c_cutreq    equ $0530
-c_state     equ $0538
-c_regpos    equ $0540
-c_arppos    equ $0548
-c_pitpos    equ $0550
-c_curlo     equ $0558
-c_curhi     equ $0560
-c_tgtlo     equ $0568
-c_tgthi     equ $0570
-c_porta     equ $0578
-c_slide     equ $0580
-c_arpfx     equ $0588
-c_arpph     equ $0590
-c_vibfx     equ $0598
-c_vibcnt    equ $05A0
-c_vibph     equ $05A8
-c_det       equ $05B0
-c_bus       equ $05B8
-c_trem      equ $05C0
-c_tremph    equ $05C8
-c_trans     equ $05D0
-c_retrig    equ $05D8
-c_retcnt    equ $05E0
-c_lreg      equ $05E8
-c_lperlo    equ $05F0
-c_lperhi    equ $05F8
-c_meter     equ $0600
-c_note      equ $0608
-c_wait      equ $0610           ; 8 каналов
-c_uins      equ $0618           ; показанный инструмент (экран)
-c_unote     equ $0620           ; показанная нота
-c_ureg      equ $0628           ; показанный регистр
-c_umeter    equ $0630
-d_pend      equ $0638           ; ударные 5, 6 (индекс канала - 5)
-d_preset    equ $063A
-regoff      equ $0640           ; card + 8 + канал (8 байт)
-cntoff      equ $0648           ; card + адрес счетчика тона (5)
-c_pdirty    equ $0650           ; высоту пересчитать
-c_bank      equ $0658           ; банк паттерна канала (8 каналов)
+; --- Переменные каналов ($0900-$0A5F) ---
+; c_lreg, c_lperlo, c_lperhi читает studio/verify.py: перенос - поправить и там
+c_ins       equ $0900           ; по 8 байт: каналы 0-4 (тоны), 5-6 ударные
+c_pend      equ $0908
+c_pnote     equ $0910
+c_pins      equ $0918
+c_delay     equ $0920
+c_cut       equ $0928
+c_cutreq    equ $0930
+c_state     equ $0938
+c_regpos    equ $0940
+c_arppos    equ $0948
+c_pitpos    equ $0950
+c_curlo     equ $0958
+c_curhi     equ $0960
+c_tgtlo     equ $0968
+c_tgthi     equ $0970
+c_porta     equ $0978
+c_slide     equ $0980
+c_arpfx     equ $0988
+c_arpph     equ $0990
+c_vibfx     equ $0998
+c_vibcnt    equ $09A0
+c_vibph     equ $09A8
+c_det       equ $09B0
+c_bus       equ $09B8
+c_trem      equ $09C0
+c_tremph    equ $09C8
+c_trans     equ $09D0
+c_retrig    equ $09D8
+c_retcnt    equ $09E0
+c_lreg      equ $09E8
+c_lperlo    equ $09F0
+c_lperhi    equ $09F8
+c_meter     equ $0A00
+c_note      equ $0A08
+c_wait      equ $0A10           ; 8 каналов
+c_uins      equ $0A18           ; показанный инструмент (экран)
+c_unote     equ $0A20           ; показанная нота
+c_ureg      equ $0A28           ; показанный регистр
+c_umeter    equ $0A30
+d_pend      equ $0A38           ; ударные 5, 6 (индекс канала - 5)
+d_preset    equ $0A3A
+regoff      equ $0A40           ; card + 8 + канал (8 байт)
+cntoff      equ $0A48           ; card + адрес счетчика тона (5)
+c_pdirty    equ $0A50           ; высоту пересчитать
+c_bank      equ $0A58           ; банк паттерна канала (8 каналов)
 
             org $1800
 
 ; === Вход ===================================================================
 
+; Запускают «Быстропускалка» (единственный защищенный файл диска) или ДОС
+; (BRUN из Бейсика): обе - через JSR, выход - RTS к ним
 start       php
             sei
+            ; Регистры - вернуть как были: ДОС вызывает плеер из ввода строки
+            ; (GETLN), и RTS приходит прямо в Бейсик - X там длина строки (0)
+            sta savea
+            stx savex
+            sty savey
+            ; ДОС в памяти: вектор $03D0 - JMP в ее заглушки $04xx, таблица ЧЗТС
+            ; типа $01. Узнать до любой записи в $0600-$0FFF
             ldx #0
+            lda DOSVEC
+            cmp #$4C
+            bne st_dos
+            lda DOSVEC+2
+            cmp #$04
+            bne st_dos
+            lda DOSTAB
+            cmp #$01
+            bne st_dos
+            inx
+st_dos      stx dosmode
+            txa
+            beq st_nod
+            jsr dos_save
+st_nod      ldx #0
 sv_zp       lda $00,x
             sta ZPSAVE,x
             inx
             bne sv_zp
-            ; Слот контроллера - его оставила «Быстропускалка» в $F6;
-            ; иначе 5
+            tsx
+            stx savesp
+            ; Слот контроллера: при ДОС - из ее таблицы, у «Быстропускалки» - в $F6;
+            ; иначе 5. Предел мелодии и блоки v2: при ДОС - до DOSSAVE, без блоков
+            ldx #SONGTOP
+            ldy #9
+            lda dosmode
+            beq st_lim
+            ldx #DOSSAVEPG
+            ldy #1
+st_lim      stx songtop
+            sty blkmax
             lda $F6
-            and #$70
+            ldx dosmode
+            beq st_slot
+            lda DOSTAB+1
+st_slot     and #$70
             cmp #$10
             bcs st_fdcok
             lda #$50
 st_fdcok    sta fdc
             lda #$10            ; ЯЗС по умолчанию в слоте 1
             sta card
-            tsx
-            stx savesp
             jsr card_init
             lda #0
             sta view
@@ -203,24 +252,97 @@ main_menu   jsr menu
             jmp main_menu
 
 quit        jsr card_off
-            jsr dsk_off
+            jsr clrscr          ; пустой текстовый экран (COUT при ДОС нельзя: она еще в BRUN)
+            lda dosmode         ; ДОС считает, что головка на ее последней дорожке
+            beq qt_1
+            jsr dsk_on
+            bcs qt_1
+            jsr dsk_recal
+            bcs qt_1
+            lda DOSTAB+4
+            sta ltrk
+            jsr dsk_seek
+qt_1        jsr dsk_off
             jsr map_main
             ldx #0
 rs_zp       lda ZPSAVE,x
             sta $00,x
             inx
             bne rs_zp
-            sta $C70A           ; экран загрузчика: АЦР-32, $1000
-            sta $C058           ; палитра 1
+            sta $C058           ; палитра 1 (экран - АЦР-32 с $1000: clrscr)
             sta $C05A
-            ; В монитор (приглашение «*»): RTS вернул бы в «Быстропускалку», а она
-            ; сразу запустила бы единственный защищенный файл - плеер - снова
-            ldx #$FF
+            lda dosmode
+            beq qt_ret
+            jmp dos_exit        ; вне страницы $18: она возвращается Бейсику
+            ; «Быстропускалка»: RTS - она перечитает каталог и запустит единственный
+            ; защищенный файл (плеер) снова, а с другим диском - его программу или меню
+qt_ret      ldx savesp
             txs
-            jsr $FDEB           ; очистка экрана монитором (COUT $8C)
-            jmp $FF65
+            lda savea
+            ldx savex
+            ldy savey
+            plp
+            rts
 
 savesp      db 0
+savea       db 0                ; регистры на входе
+savex       db 0
+savey       db 0
+dosmode     db 0                ; 1 - запущен из ДОС (BRUN)
+songtop     db SONGTOP          ; страница, с которой мелодия не помещается
+blkmax      db 9                ; блоков .YZ v2 не больше blkmax - 1 (при ДОС - 0)
+
+; Резидентная часть ДОС $0600-$0FFF <-> DOSSAVE. Без нулевой страницы: восстановление
+; идет уже после нее
+dos_save    ldx #0
+dsv_l       lda $0600,x
+            sta DOSSAVE,x
+            lda $0700,x
+            sta DOSSAVE+$100,x
+            lda $0800,x
+            sta DOSSAVE+$200,x
+            lda $0900,x
+            sta DOSSAVE+$300,x
+            lda $0A00,x
+            sta DOSSAVE+$400,x
+            lda $0B00,x
+            sta DOSSAVE+$500,x
+            lda $0C00,x
+            sta DOSSAVE+$600,x
+            lda $0D00,x
+            sta DOSSAVE+$700,x
+            lda $0E00,x
+            sta DOSSAVE+$800,x
+            lda $0F00,x
+            sta DOSSAVE+$900,x
+            inx
+            bne dsv_l
+            rts
+
+dos_restore ldx #0
+drs_l       lda DOSSAVE,x
+            sta $0600,x
+            lda DOSSAVE+$100,x
+            sta $0700,x
+            lda DOSSAVE+$200,x
+            sta $0800,x
+            lda DOSSAVE+$300,x
+            sta $0900,x
+            lda DOSSAVE+$400,x
+            sta $0A00,x
+            lda DOSSAVE+$500,x
+            sta $0B00,x
+            lda DOSSAVE+$600,x
+            sta $0C00,x
+            lda DOSSAVE+$700,x
+            sta $0D00,x
+            lda DOSSAVE+$800,x
+            sta $0E00,x
+            lda DOSSAVE+$900,x
+            sta $0F00,x
+            inx
+            bne drs_l
+            rts
 
 ; === Ячейка =================================================================
 
@@ -398,4 +520,34 @@ wt_r        lda #0
             include "disk.a65"
             include "ui.a65"
             include "gen_tables.a65"
+
+; Выход в ДОС. Код - в последней странице тела, вне $1800-$18FF: здесь она
+; снова становится переходниками Бейсика.
+; - $0600-$0FFF (ZPSAVE там больше не нужен) - на место;
+; - страницы плеера $19 - до этой - нулями: с $1901 у Бейсика программа, код
+;   плеера он принял бы за ее строки (NEW и ввод строк - «синт. ошибка»);
+; - страница $18 - на место;
+; - теплый перезапуск $03D0: ДОС закончит BRUN и вернет в Бейсик. RTS привел бы
+;   прямо в Бейсик, а ДОС осталась бы «внутри» BRUN, и следующее обращение к ней
+;   ушло бы по старому стеку
+dos_exit    jsr dos_restore
+            lda #0
+            ldx #$19
+dx_p        stx dx_w+2
+            ldy #0
+dx_w        sta $1900,y
+            iny
+            bne dx_w
+            inx
+            cpx #hi(dos_exit)
+            bne dx_p
+            ldx savesp          ; savesp - в странице $18: прочитать до нее
+            txs
+            ldy #0
+dx_1        lda SAVE18,y
+            sta $1800,y
+            iny
+            bne dx_1
+            plp
+            jmp DOSVEC
 

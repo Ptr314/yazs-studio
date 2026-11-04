@@ -367,8 +367,11 @@ dp_1        asl dirp
 
 ; --- Загрузка файла sel: тело B-файла с SONGLD, .YZ с YZ; C = 1 - ошибка ---
 ; У v2 с блоками основная часть кончается до окна, сектора за ней - блоки по
-; 8 КБ: каждый грузится через окно $A000-$BFFF в свой банк (8, 9, ...)
-load_file   jsr map_main
+; 8 КБ: каждый грузится через окно $A000-$BFFF в свой банк (8, 9, ...).
+; Мелодия - до страницы songtop: $C0, при ДОС $B6 (выше - сохраненная ДОС)
+load_file   lda #0
+            sta toobig
+            jsr map_main
             jsr dsk_on
             bcs lf_e1
             lda sel
@@ -409,9 +412,10 @@ lf_pair     ldy tsidx
             lda zt+1
             cmp lmainpg
             beq lf_b1           ; основная часть кончилась - первый блок
-            cmp #SONGTOP
-            bcs lf_e1           ; не помещается
+            cmp songtop
             bcc lf_rd
+            inc toobig          ; не помещается
+            bcs lf_e1
 lf_b1       lda #8
             bne lf_bank
 lf_blk      lda zt+1
@@ -489,8 +493,8 @@ yz_layout   lda #$FF
             bne yl_ok
             lda YZ+86           ; блоков
             beq yl_ok
-            cmp #9
-            bcs yl_bad
+            cmp blkmax          ; 1-8; при ДОС блоков нет: банки 8-15 - ее
+            bcs yl_big
             clc
             adc #8
             sta lblkend
@@ -502,8 +506,11 @@ yz_layout   lda #$FF
             adc #hi(SONGLD)
             sta lmainpg
             cmp #WINPG+1
-            bcs yl_bad
+            bcs yl_big
 yl_ok       clc
             rts
-yl_bad      sec
+yl_big      inc toobig
+            sec
             rts
+
+toobig      db 0                ; 1 - файл не помещается (ошибка загрузки не диска)

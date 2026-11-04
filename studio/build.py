@@ -32,6 +32,7 @@ TEMPLATE = os.path.join(ROOT, "disk", "template840.dsk")
 DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "out")
 PLAYER_ADDR = 0x1800
+LOADER_ADDR = 0x4000        # файл ЯЗС-ПЛЕЕР грузится сюда (player/loader.a65)
 SONG_ADDR = 0x3F00
 
 # Партитуры в порядке на диске: модуль score/<имя>.py, имя файла на диске
@@ -81,7 +82,7 @@ STRINGS = {
     "s_choose": "ВЫБЕРИТЕ МЕЛОДИЮ:",
     "s_help1": " ВВЕРХ/ВНИЗ-ВЫБОР  ВВОД-ИГРАТЬ",
     "s_help2": " А-ВСЕ ПОДРЯД  Д-ПЕРЕЧИТАТЬ ДИСК",
-    "s_help3": " ВЛЕВО/ВПРАВО-СЛОТ  РЕД-МОНИТОР",
+    "s_help3": " ВЛЕВО/ВПРАВО-СЛОТ  РЕД-ВЫХОД",
     "s_slot": "ЯЗС В СЛОТЕ ",
     "s_slot2": "",
     "s_nofiles": "НА ДИСКЕ НЕТ ФАЙЛОВ *.YZ",
@@ -89,6 +90,7 @@ STRINGS = {
     "s_diskerr": "ОШИБКА ЧТЕНИЯ ДИСКА",
     "s_loading": "ЗАГРУЗКА...",
     "s_loaderr": "ОШИБКА ЗАГРУЗКИ ФАЙЛА",
+    "s_toobig": "НЕ ПОМЕЩАЕТСЯ В ПАМЯТЬ",
     "s_time": "ВРЕМЯ 00:00/00:00    КАДР",
     "s_drum6": "БАРАБАН",
     "s_drum7": "ТАРЕЛКА",
@@ -142,22 +144,32 @@ def gen_sources():
         f.write("; Сгенерировано build.py - не править\n")
 
 
-def assemble(out):
-    binf = os.path.join(out, "player.bin")
-    lst = os.path.join(out, "player.lst")
+def as65(src, out, name):
+    binf = os.path.join(out, name + ".bin")
+    lst = os.path.join(out, name + ".lst")
     if os.path.exists(binf):
         os.remove(binf)
-    proc = subprocess.run([AS65, "-l" + lst, "-n", "-w", "-h0", "-o" + binf, "player.a65"],
+    proc = subprocess.run([AS65, "-l" + lst, "-n", "-w", "-h0", "-o" + binf, src],
                           cwd=PLAYER, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     text = proc.stdout.decode("cp866", errors="replace")
     if proc.returncode != 0 or not os.path.exists(binf) or "rror" in text:
         sys.stderr.write(text)
-        sys.exit("AS65: ошибка сборки")
-    data = open(binf, "rb").read()
-    end = PLAYER_ADDR + len(data)
+        sys.exit("AS65: ошибка сборки %s" % src)
+    return open(binf, "rb").read()
+
+
+def assemble(out):
+    """Тело плеера (с $1800) и загрузчик перед ним: (тело, файл ЯЗС-ПЛЕЕР для диска)"""
+    data = as65("player.a65", out, "player")
+    pages = (len(data) + 255) // 256
+    # загрузчик копирует тело целыми страницами: до $3EFC (тело B-файла мелодии)
+    end = PLAYER_ADDR + pages * 256
     if end > SONG_ADDR - 4:
-        sys.exit("плеер %d байт заходит на мелодию ($%04X)" % (len(data), end))
-    return data
+        sys.exit("плеер %d байт (%d страниц) заходит на мелодию ($%04X)" % (len(data), pages, end))
+    with open(os.path.join(PLAYER, "gen_loader.a65"), "w", encoding="utf-8") as f:
+        f.write("; Сгенерировано build.py - не править\nPLPAGES     equ %d\n" % pages)
+    loader = as65("loader.a65", out, "loader")
+    return data, mkdisk840.b_body(LOADER_ADDR, loader + data)
 
 
 def song_body(data):
@@ -168,12 +180,12 @@ def song_body(data):
 
 def blank_disk(player):
     """Шаблон 840 КБ (дорожка 0 и ДОС) с плеером - первым и единственным защищенным
-    файлом: его «Быстропускалка» и запускает"""
+    файлом: его «Быстропускалка» и запускает (или BRUN из ДОС). player - assemble()"""
     disk = mkdisk840.Disk840(open(TEMPLATE, "rb").read())
     if any(n == "SOUNDTEST" for _, n, _ in disk.listing()):
         disk.delete("SOUNDTEST")              # исходный soundtest.DSK вместо шаблона
     disk.set_volume("ЯЗС-ПЛЕЕР")
-    disk.add("ЯЗС-ПЛЕЕР", mkdisk840.T_BIN, mkdisk840.b_body(PLAYER_ADDR, player), locked=True)
+    disk.add("ЯЗС-ПЛЕЕР", mkdisk840.T_BIN, player[1], locked=True)
     return disk
 
 
@@ -231,7 +243,8 @@ def main():
 
     gen_sources()
     player = assemble(a.out)
-    print("плеер: %d байт, $%04X-$%04X" % (len(player), PLAYER_ADDR, PLAYER_ADDR + len(player) - 1))
+    print("плеер: %d байт, $%04X-$%04X; файл с загрузчиком %d байт с $%04X" % (
+        len(player[0]), PLAYER_ADDR, PLAYER_ADDR + len(player[0]) - 1, len(player[1]) - 4, LOADER_ADDR))
     disk = blank_disk(player)
 
     if a.set in ("classics", "demo"):

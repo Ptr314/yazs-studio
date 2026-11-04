@@ -22,9 +22,9 @@ import pyplay
 import render
 
 ADDR_TCNT = 0x1E
-ADDR_LREG = 0x05E8
-ADDR_PLO = 0x05F0
-ADDR_PHI = 0x05F8
+ADDR_LREG = 0x09E8          # c_lreg, c_lperlo, c_lperhi в player.a65
+ADDR_PLO = 0x09F0
+ADDR_PHI = 0x09F8
 
 
 def script(disk, samples, step):

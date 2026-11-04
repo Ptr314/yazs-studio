@@ -492,7 +492,11 @@ play_file   lda #0
             sta attr
             lda #lo(s_loaderr)
             ldy #hi(s_loaderr)
-            jsr print
+            ldx toobig          ; не диск, а память (при ДОС - мелодия с блоками v2)
+            beq pf_e1
+            lda #lo(s_toobig)
+            ldy #hi(s_toobig)
+pf_e1       jsr print
             jsr kbd_get
             lda #0
             sta playall

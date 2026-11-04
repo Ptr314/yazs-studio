@@ -1,0 +1,47 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Загрузчик файла ЯЗС-ПЛЕЕР: B-файл грузится с LOADADDR, за этим кодом - тело
+; плеера (собрано с $1800). Загрузчик сохраняет страницу $1800-$18FF в SAVE18
+; (у Бейсика-А9 там его переходники, их зовут и Бейсик, и ДОС: BRUN по адресу
+; $1800 затер бы их), копирует тело плеера на $1800 и переходит туда. Регистры
+; и стек - как дал запускающий («Быстропускалка» или BRUN ДОС): плеер берет их
+; сам. Нулевая страница не трогается: плеер сохраняет ее первым делом.
+;
+; Сборка: build.py, PLPAGES - в gen_loader.a65 (страниц тела плеера).
+
+            include "gen_loader.a65"
+
+LOADADDR    equ $4000           ; свободно и у «Быстропускалки», и под Бейсиком
+PLAYER      equ $1800
+SAVE18      equ $B500           ; страница $18 до выхода (player.a65: DOSSAVE - $100)
+
+            org LOADADDR
+
+load        sta ld_a
+            stx ld_x
+            sty ld_y
+            ldx #0
+ld_s        lda PLAYER,x
+            sta SAVE18,x
+            inx
+            bne ld_s
+            ldy #PLPAGES        ; тело - страницами, без нулевой страницы: адреса
+ld_p        ldx #0              ; в командах копирования растут сами
+ld_b        lda body,x
+ld_w        sta PLAYER,x
+            inx
+            bne ld_b
+            inc ld_b+2
+            inc ld_w+2
+            dey
+            bne ld_p
+            lda ld_a
+            ldx ld_x
+            ldy ld_y
+            jmp PLAYER
+
+ld_a        db 0
+ld_x        db 0
+ld_y        db 0
+body                            ; тело плеера ($1800...)
