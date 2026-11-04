@@ -13,8 +13,9 @@
 форшлаг ставится на строку раньше главной ноты.
 
 MIDI того же переложения (R. J. Stratton, Jr.) - только для сверки (--compare):
-мелодия и бас по тактам. Он местами расходится с изданием (октавные удвоения,
-другая хроматика, последние аккорды октавой выше): там прав скан.
+мелодия и бас по тактам, звуковысотные классы по долям. Он местами расходится с
+изданием (октавные удвоения, другая хроматика, последние аккорды октавой выше):
+спорное решает скан.
 
 Левая рука делится на бас (нижняя нота на сильной доле или ниже ре малой октавы) и
 аккомпанемент. Каналы:
@@ -248,6 +249,31 @@ def compare(scan, midi, labels, first=1):
             print("такт %3d (скан %-7s) бас: скан %s, MIDI %s" % (
                 b + 1 + k, lab, name(bs[b]) if b in bs else "-", name(bm[b]) if b in bm else "-"))
     print("расхождений: мелодия %d тактов, бас %d тактов из %d" % (bad_m, bad_b, nb))
+    chroma(scan, midi, labels, first)
+
+
+def chroma(scan, midi, labels, first=1):
+    """Звуковысотные классы обеих рук по долям: доли, где у скана есть класс, которого
+    нет в MIDI, а в MIDI есть соседний на полутон, - знак альтерации, отнесенный не к
+    той ноте (так нашелся кластер A#-B в такте 2 вместо A-B#). Решает скан: MIDI в
+    таких местах и сам ошибается"""
+    def by_beat(ns, shift):
+        out = {}
+        for t0, _, p in ns:
+            out.setdefault(t0 // TICKS - shift, set()).add(p % 12)
+        return out
+    s = by_beat(scan[0] + scan[1], 0)
+    m = by_beat(midi[0] + midi[1], (first - 1) * BEATS)
+    bad = 0
+    for beat in sorted(set(s) | set(m)):
+        a, c = s.get(beat, set()), m.get(beat, set())
+        if any((x + 1) % 12 in c - a or (x - 1) % 12 in c - a for x in a - c):
+            bad += 1
+            bar = beat // BEATS
+            print("такт %3d (скан %-7s) доля %d: скан %s | MIDI %s" % (
+                bar + first, labels[bar] if bar < len(labels) else "?", beat % BEATS + 1,
+                " ".join(NM[x] for x in sorted(a)), " ".join(NM[x] for x in sorted(c))))
+    print("долей с полутоновым расхождением: %d" % bad)
 
 
 # --- раскладка по каналам ---

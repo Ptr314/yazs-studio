@@ -14,7 +14,10 @@
     --version 1|2    версия .YZ (по умолчанию младшая, в которую мелодия помещается)
     --stat           только сводка: что мелодия использует из SID, без перевода
     --frames В:С:N   покадровая распечатка голоса В (1-3) с кадра С, N кадров
-    --disk ОБРАЗ     диск 840 КБ с плеером и всеми переведенными мелодиями (и .hfe)
+    --disk ОБРАЗ     диск 840 КБ с плеером и всеми переведенными мелодиями (и .hfe); больше
+                     34 мелодий - несколько дисков ОБРАЗ-1, ОБРАЗ-2... по SID-файлам
+    --min-notes N    пропустить мелодии меньше N нот тоновых голосов: звуковые эффекты игр
+                     (у RoboCop 3 и Joe Blade 2 - по 0-3 ноты), с --all
 
 После перевода модель движка (pyplay) играет .YZ и сверяет высоту каналов с
 регистрами SID по кадрам: медиана и 95-й процентиль отклонения в центах.
@@ -64,6 +67,10 @@ def one(sf, song, a, results):
         chorus = [int(x) for x in chorus.split(",")]
     conv = convert.Converter(d, sf, chorus=chorus, end=end, loud=a.loud, version=a.version)
     song_obj = conv.run()
+    if conv.stats["tonal"] < a.min_notes:
+        print("%s: %d нот - звуковой эффект, пропуск (--min-notes %d)" % (
+            tag, conv.stats["tonal"], a.min_notes))
+        return
     try:
         data, L, loop_frame = convert.build(song_obj, end, loop_start, from_start, a.version)
     except ValueError as e:
@@ -90,7 +97,7 @@ def one(sf, song, a, results):
     if v["silent_in_tonal"] or v["plan_not_exact"]:
         print("  ВНИМАНИЕ: молчит на тоновых строках %d, высота не по плану %d" % (
             v["silent_in_tonal"], v["plan_not_exact"]))
-    results.append((disk_name(sf, song, chorus), data))
+    results.append((disk_name(sf, song, chorus), data, sf.path))
 
 
 def main():
@@ -107,6 +114,7 @@ def main():
     ap.add_argument("--stat", action="store_true")
     ap.add_argument("--frames")
     ap.add_argument("--disk")
+    ap.add_argument("--min-notes", type=int, default=0)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     results = []
@@ -119,23 +127,46 @@ def main():
         for s in songs:
             one(sf, s, a, results)
     if a.disk and results:
-        import build
-        names = set()
-        files = []
-        for n, data in results:
-            k = 2
-            base = n
-            while n in names:
-                n = base[:-3][:27] + "%d.YZ" % k
-                k += 1
-            names.add(n)
-            files.append((n, data))
-        build.gen_sources()
-        disk = build.player_disk(files, os.path.abspath(a.disk), os.path.abspath(a.out))
-        print("диск:", os.path.abspath(a.disk))
+        make_disks(results, a)
+
+
+def make_disks(results, a):
+    """Диск с плеером и мелодиями. Не помещаются в каталог шаблона (35 записей, одна -
+    плеер) или в список плеера (MAXFILES = 48) - несколько дисков ОБРАЗ-1, ОБРАЗ-2...:
+    мелодии одного SID-файла по возможности на одном диске"""
+    import build
+    import mkdisk840
+    names = set()
+    groups = []                                # [(SID-файл, [(имя, данные)])] по порядку
+    for n, data, src in results:
+        k = 2
+        base = n
+        while n in names:
+            n = base[:-3][:27] + "%d.YZ" % k
+            k += 1
+        names.add(n)
+        if not groups or groups[-1][0] != src:
+            groups.append((src, []))
+        groups[-1][1].append((n, data))
+    template = mkdisk840.Disk840(open(build.TEMPLATE, "rb").read())
+    per = min(7 * len(template.catalog_sectors()) - 1, 48)
+    disks = [[]]
+    for _, g in groups:
+        for i in range(0, len(g), per):
+            part = g[i:i + per]
+            if disks[-1] and len(disks[-1]) + len(part) > per:
+                disks.append([])
+            disks[-1] += part
+    stem, ext = os.path.splitext(os.path.abspath(a.disk))
+    paths = [stem + ext] if len(disks) == 1 else ["%s-%d%s" % (stem, i + 1, ext or ".dsk")
+                                                  for i in range(len(disks))]
+    build.gen_sources()
+    for path, files in zip(paths, disks):
+        disk = build.player_disk(files, path, os.path.abspath(a.out))
+        print("диск: %s (%d мелодий)" % (path, len(files)))
         for ftype, name, n in disk.listing():
             print("  %02X %4d  %s" % (ftype, n, name))
-        print("hfe:", build.save_hfe(os.path.abspath(a.disk), os.path.abspath(a.out)))
+        print("hfe:", build.save_hfe(path, os.path.abspath(a.out)))
 
 
 if __name__ == "__main__":

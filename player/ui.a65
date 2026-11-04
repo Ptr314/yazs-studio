@@ -13,6 +13,12 @@ KEY_DOWN    equ $9A
 KEY_ENTER   equ $8D
 KEY_ESC     equ $9B
 KEY_SPACE   equ $A0
+KEY_R       equ $D2             ; R; $F2 - Р кириллицей (и r)
+KEY_R2      equ $F2
+
+LIST_ROWS   equ 21              ; строк списка мелодий (экран 4-24, в 26 - слот)
+ARROW_UP    equ $19             ; стрелки знакогенератора
+ARROW_DOWN  equ $1A
 
 A_WHITE     equ $37
 A_GREY      equ $27
@@ -340,12 +346,12 @@ mn_scroll   lda sel
             sta mtop
 mn_s1       lda mtop
             clc
-            adc #21
+            adc #LIST_ROWS-1
             cmp sel
             bcs mn_s2
             lda sel
             sec
-            sbc #21
+            sbc #LIST_ROWS-1
             sta mtop
 mn_s2       jmp mn_list
 
@@ -368,7 +374,8 @@ show_slot   ldx #26
             ldy #hi(s_slot2)
             jmp print
 
-; Список: 22 строки с mtop, выбранная - инверсией
+; Список: LIST_ROWS строк с mtop, выбранная - инверсией. В колонке 31 стрелки:
+; вверх - выше есть еще мелодии, вниз - ниже
 draw_list   lda #0
             sta t0
 dl_l        lda t0
@@ -433,13 +440,39 @@ dl_b        lda #$A0
             bne dl_b
 dl_next     inc t0
             lda t0
-            cmp #22
+            cmp #LIST_ROWS
             bne dl_l
-            rts
+            lda #A_CYAN
+            sta attr
+            ldx #4
+            ldy #31
+            jsr at
+            lda #$A0
+            ldx mtop
+            beq dl_up
+            lda #ARROW_UP
+dl_up       jsr putc
+            ldx #4+LIST_ROWS-1
+            ldy #31
+            jsr at
+            lda mtop
+            clc
+            adc #LIST_ROWS
+            cmp nfiles
+            lda #$A0
+            bcs dl_down
+            lda #ARROW_DOWN
+dl_down     jmp putc
 
 ; --- Воспроизведение ---
 
-play_file   jsr clrscr
+; Файл sel. Повтор из заголовка (D0 флагов) по умолчанию выключен: мелодия
+; кончается на последнем кадре. R в режиме одного файла включает и выключает
+; повтор (rept): с кадром повтора - с него, без - файл заново после отзвука.
+; ПРОБЕЛ - следующий файл; режим повтора у него снова выключен
+play_file   lda #0
+            sta rept
+            jsr clrscr
             jsr header
             ldx #14
             ldy #6
@@ -464,6 +497,11 @@ play_file   jsr clrscr
             sta playall
             rts
 pf_ok       jsr eng_start
+            lda loopf           ; повтор из заголовка - до R
+            sta hloop
+            lda loopfh
+            sta hlooph
+            jsr set_loop
             lda #1
             sta playing
             jsr draw_play
@@ -489,7 +527,7 @@ pl_k1       cmp #KEY_SPACE
             jsr draw_play
             jmp pl_nokey
 pl_k2       cmp #KEY_RIGHT
-            bne pl_nokey
+            bne pl_k3
             lda frame
             clc
             adc #1
@@ -497,16 +535,35 @@ pl_k2       cmp #KEY_RIGHT
             lda frameh
             adc #0
             sta jumph
+            jmp pl_nokey
+pl_k3       cmp #KEY_R
+            beq pl_rep
+            cmp #KEY_R2
+            bne pl_nokey
+pl_rep      lda playall         ; повтор - только у одного файла
+            bne pl_nokey
+            lda rept
+            eor #1
+            sta rept
+            jsr set_loop
+            jsr show_rept
 pl_nokey    lda ended
             beq pl_loop
             lda tail
             cmp #100
             bcc pl_loop
+            ; конец: с R - заново, подряд - следующий, иначе в меню
+            lda rept
+            beq pl_end
+            jsr card_silence
+            jmp pf_ok
+pl_end      lda playall
+            bne pl_next
+            sta playing
+            jmp card_silence
 pl_next     lda #0
             sta playing
             jsr card_silence
-            lda playall
-            beq pl_r
             lda sel
             clc
             adc #1
@@ -515,12 +572,67 @@ pl_next     lda #0
             lda #0
 pl_n1       sta sel
             jmp play_file
-pl_r        rts
+
+; Кадр повтора движку: из заголовка, если повтор включен, иначе нет ($FF)
+set_loop    lda #$FF
+            tay
+            ldx rept
+            beq slp_1
+            lda hloop
+            ldy hlooph
+slp_1       sta loopf
+            sty loopfh
+            rts
+
+; Строка режима повтора: пульт - строка 30, трекер - строка 31 с колонки 33.
+; В режиме «все подряд» пусто
+show_rept   lda playall
+            bne sr_r
+            lda view
+            bne sr_trk
+            ldx #30
+            ldy #0
+            jsr at
+            lda #A_GREY
+            sta attr
+            lda #lo(s_rept)
+            ldy #hi(s_rept)
+            jsr print
+            lda #A_GREEN
+            sta attr
+            lda #lo(s_on)
+            ldy #hi(s_on)
+            ldx rept
+            bne sr_p
+            lda #A_GREY
+            sta attr
+            lda #lo(s_off)
+            ldy #hi(s_off)
+sr_p        jmp print
+sr_trk      ldx #31
+            ldy #33
+            jsr at64
+            lda #lo(s_rept)
+            ldy #hi(s_rept)
+            jsr print64
+            lda #lo(s_on)
+            ldy #hi(s_on)
+            ldx rept
+            bne sr_t1
+            lda #lo(s_off)
+            ldy #hi(s_off)
+sr_t1       jmp print64
+sr_r        rts
+
+rept        db 0                ; 1 - повтор включен (R)
+hloop       db 0                ; кадр повтора из заголовка ($FF - нет)
+hlooph      db 0
 
 ; Неизменная часть экрана воспроизведения
 draw_play   lda view
             beq dp_panel
-            jmp trk_draw
+            jsr trk_draw
+            jmp show_rept
 dp_panel    jsr clrscr
             jsr header
             lda #A_YELLOW
@@ -619,7 +731,7 @@ dp_inv      sta c_uins,x
             lda #0
             sta uistep
             sta flash
-            rts
+            jmp show_rept
 
 sep_line    ldy #0
             jsr at
@@ -745,9 +857,10 @@ ut_nomet    ; полосы НЧ СЧ ВЧ и D3 по последнему рег
             lda c_lreg,x
             and #$0F
             ldy c_state,x
-            bne ut_b0
+            bne bus_show
             lda #0
-ut_b0       cmp c_ureg,x
+; Буквы Н С В Г канала X по разрядам A: D2, D1, D0, D3 (в строке uirow)
+bus_show    cmp c_ureg,x
             beq ut_r
             sta c_ureg,x
             sta t1
@@ -811,7 +924,8 @@ bartab      db 0,1,2,2,3,4,5,5,6,7,8,8,9,10,11,12
 barcol      db I_GREEN,I_GREEN,I_GREEN,I_GREEN,I_GREEN,I_GREEN,I_GREEN
             db I_YELLOW,I_YELLOW,I_YELLOW,I_RED,I_RED
 
-; Ударный X (5, 6): пресет и полоса; на ударе - вспышка рамки
+; Ударный X (5, 6): пресет, полоса и буквы разрядов пресета, как у тонов (пока
+; звучит); на ударе - вспышка рамки
 ui_drum     stx uich
             lda chrow,x
             sta uirow
@@ -846,7 +960,13 @@ ud_2        sta c_meter,x
             beq ud_3
             sta c_umeter,x
             jsr bar_draw
-ud_3        lda flash
+ud_3        ldx uich
+            lda c_meter,x
+            beq ud_4
+            lda d_preset-5,x
+            and #$0F
+ud_4        jsr bus_show
+            lda flash
             beq ud_r
             dec flash
             bne ud_r
