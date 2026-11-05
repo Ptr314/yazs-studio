@@ -5,12 +5,11 @@
 партитуры score/*.py -> *.YZ, все на копию disk/template840.dsk (дорожка 0 с
 «Быстропускалкой» и ДОС 3.3), образ - в dist/.
 
-    python studio/build.py                     симфония (диск библиотеки eCat3) -> dist/yazs-player.dsk
+    python studio/build.py                     симфония -> dist/yazs-player.dsk
     python studio/build.py --set all           симфония и все пьесы -> dist/yazs-collection.dsk
     python studio/build.py --set classics      переложения классики -> dist/yazs-classics.dsk
     python studio/build.py --set demo          «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk
     python studio/build.py --only m2_adagio --disk x.dsk     только эти партитуры
-    python studio/build.py --to-ecat3          и копия в eCat3: library/agat/yazs-player.dsk/.hfe
 
 Ключи: --out каталог (промежуточное: player.bin, .lst, .yz), --extra модуль, --no-hfe,
 --add файл.yz|файл.yzt (готовая мелодия или текстовый вид, yztext.py).
@@ -229,7 +228,7 @@ def load_score(name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", choices=("symphony", "all", "classics", "demo"), default="symphony",
-                    help="symphony - диск библиотеки eCat3, all - и все пьесы, classics - классика, "
+                    help="symphony - симфония, all - и все пьесы, classics - классика, "
                          "demo - «Демо ЯЗС»")
     ap.add_argument("--out", default=os.path.join(OUT, "build"))
     ap.add_argument("--disk", help="образ (по умолчанию dist/yazs-player.dsk, yazs-collection.dsk, "
@@ -239,8 +238,6 @@ def main():
     ap.add_argument("--add", action="append", default=[],
                     help="добавить на диск готовую мелодию: файл .yz или текстовый вид .yzt")
     ap.add_argument("--no-hfe", action="store_true")
-    ap.add_argument("--to-ecat3", action="store_true",
-                    help="скопировать диск и .hfe в eCat3: library/agat/yazs-player.*")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     disk_path = a.disk or os.path.join(DIST, {"symphony": "yazs-player.dsk", "all": "yazs-collection.dsk",
@@ -291,18 +288,9 @@ def main():
     print("диск:", disk_path)
     for ftype, name, n in mkdisk840.Disk840(bytes(disk.d)).listing():
         print("  %02X %4d  %s" % (ftype, n, name))
-    hfe = None
     if not a.no_hfe:
         hfe = save_hfe(disk_path, a.out)
         print("hfe: ", hfe, os.path.getsize(hfe), "байт")
-    if a.to_ecat3:
-        import shutil
-        import render
-        lib = os.path.join(render.ECAT3, "library", "agat")
-        shutil.copyfile(disk_path, os.path.join(lib, "yazs-player.dsk"))
-        if hfe:
-            shutil.copyfile(hfe, os.path.join(lib, "yazs-player.hfe"))
-        print("в eCat3:", lib, "- перезапишите эталоны теста work-agat-9-yazs-player (docs/ecat3.md)")
 
 
 if __name__ == "__main__":

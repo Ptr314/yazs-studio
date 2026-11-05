@@ -252,7 +252,7 @@ python studio/sidcompare.py мелодия.sid --yz старый.yz   готов
 
 Мелодии C64 по большей части защищены авторским правом (Хаббард, Тел, Бримбл и другие живы или
 умерли недавно). Конвертер - инструмент для своих файлов. Переведенные мелодии не кладутся в
-`library/` и в поставку eCat3, в репозиторий и на диски для публикации. Диски примеров
+поставку eCat3, в репозиторий и на диски для публикации. Диски примеров
 (`dist/yazs-goes-gaming-1.dsk`, `-2.dsk`: `sid2yz.py docs-external/sid-examples/*.sid --all
 --out out/gaming_all --disk dist/yazs-goes-gaming.dsk --release-drums Joe_Blade_2`) - только для
 себя: `dist/` и `out/` не в git.

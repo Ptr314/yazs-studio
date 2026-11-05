@@ -55,7 +55,8 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   моделью не поймает: она будет в обоих.
 - **Адреса переменных плеера зашиты снаружи:**
   - `verify.py`: `$1E`, `$09E8`, `$09F0`, `$09F8`;
-  - тест eCat3: `$1E`, `$14`, `$4D`.
+  - `listen.py`, `lostticks.py`: `$1E` (`listen.py` и `$79-$7C`);
+  - `brun.py`: `$4D`, `$76`.
 
   Перенесли переменную - поправьте и их.
 - **`score/data_*.py`** сгенерированы `studio/importers/gen_*.py` из MIDI/LilyPond в
@@ -130,9 +131,6 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   `timeout_ms`. Снимки экрана - при остановленном процессоре (`COMMAND cpu.stop()`).
 - **«Потеряно N тиков»** в первые секунды у больших файлов - загрузка с диска и таблица времени
   кадров (`docs/player.md`, «Время на экране»), не перегруз (`studio/lostticks.py`).
-- **Диск библиотеки eCat3** (`library/agat/yazs-player.dsk`) и тест `work-agat-9-yazs-player`:
-  - `studio/build.py --to-ecat3`, затем тест в eCat3 (`docs/ecat3.md`);
-  - эталоны перезаписываются там, коммит - в eCat3;
-  - тест писался под выход в монитор: с нынешним выходом (к «Быстропускалке») его последний шаг
-    надо переписать (`docs/ecat3.md`);
-  - модель ячейки - код eCat3, правится по правилам его `CLAUDE.md`.
+- **В eCat3 нет ни дисков, ни тестов ЯЗС-Студии:** диски плеера живут только здесь (`dist/`), а их
+  проверки - `studio/checks.py`. В eCat3 - модель ячейки и машина `Agat-9-yazs.ext`; модель - код
+  eCat3, правится по правилам его `CLAUDE.md` (`docs/ecat3.md`).
