@@ -132,7 +132,7 @@ def main():
         else:
             if not os.path.isfile(build.AS65) or os.name != "nt":
                 sys.exit("нет AS65 (%s): задайте готовый диск с плеером, например --disk "
-                         "dist/yazs-player.dsk" % build.AS65)
+                         "dist/yazs-demo.dsk" % build.AS65)
             if os.path.exists(disk_path):
                 try:
                     os.remove(disk_path)

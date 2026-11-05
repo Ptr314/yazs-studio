@@ -24,10 +24,10 @@
   на готовом диске плеера дописываются и заменяются без AS65 (`studio/yzdisk.py`), слушать правку -
   в окне eCat3 с плеером (`studio/play.py`).
 - **Партитуры** (`studio/score/`):
-  - «Симфония А-Г-А-Т» в шести частях и «тур по тембрам» - диск `yazs-player.dsk` (`build.py`);
+  - «Симфония А-Г-А-Т» в шести частях и «тур по тембрам»;
   - пьесы в разных стилях (буги, диско, джаз-мануш);
   - переложения классики (Вивальди, Григ, Чайковский, Римский-Корсаков, Джоплин) - `docs/music.md`;
-  - конечные диски «Демо ЯЗС» и классики (`build.py --set demo`, `--set classics`).
+  - диски «Демо ЯЗС» (симфония, тур, свои пьесы) и классики (`build.py`, `build.py --set classics`).
 - **Конвертер SID** (`studio/sid2yz.py`, `studio/sid/`): мелодии C64 в `.YZ`, с разбором того, что
   переносится, - `docs/SID.md`.
 - **Модель движка** (`studio/pyplay.py`): тот же расчет, что в плеере, тик за тиком; по ней
@@ -43,14 +43,12 @@
 AS65 (Win32) лежит в `third_party/as65`.
 
 ```
-python studio/build.py                  диск симфонии -> dist/yazs-player.dsk и .hfe
-python studio/build.py --set all        симфония и все пьесы -> dist/yazs-collection.dsk
+python studio/build.py                  «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk и .hfe
 python studio/build.py --set classics   переложения классики -> dist/yazs-classics.dsk
-python studio/build.py --set demo       «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk
 python studio/listen.py m5_synth --mp3  одна мелодия: WAV/MP3 на скорости MAX, уровни, запас тика
 python studio/listen.py файл.yz --mp3   то же для готового .yz
 python studio/yztext.py файл.yz         .yz -> текст файл.yzt; файл.yzt -> обратно (docs/text-format.md)
-python studio/play.py файл.yzt --disk dist/yazs-player.dsk    мелодия в окне eCat3, клавиши плеера
+python studio/play.py файл.yzt --disk dist/yazs-demo.dsk      мелодия в окне eCat3, клавиши плеера
 python studio/yzdisk.py диск.dsk --add файл.yzt               на готовый диск, без AS65
 python studio/sid2yz.py мелодия.sid     мелодия C64 -> .yz (docs/SID.md)
 python studio/checks.py                 все проверки (docs/development.md)
@@ -68,7 +66,7 @@ python studio/checks.py                 все проверки (docs/developmen
 | `disk/` | шаблон диска 840 КБ: дорожка 0 с «Быстропускалкой» и ДОС 3.3 |
 | `third_party/` | AS65 и тесты процессора Клауса Дормана |
 | `tests/` | суммы собранных партитур (`checks.py`) |
-| `experiments/` | архив опытов: «теплая» версия, сравнение с демо НКЛ, гармоники тона, варианты «Шмеля» |
+| `experiments/` | архив опытов: сравнение с демо НКЛ, гармоники тона, варианты «Шмеля» |
 | `docs/` | документация |
 | `docs-external/` | не в git: схема ячейки, записи плат, исходные диски, ноты-источники, примеры SID (`docs/external.md`) |
 | `dist/`, `out/` | не в git: собранные диски и промежуточные файлы |

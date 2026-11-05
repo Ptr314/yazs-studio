@@ -39,8 +39,8 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
 - **Партитура** `studio/score/<имя>.py` - функция `song()`, возвращает `compose.Song`;
   `Song.build()` дает байты `.YZ`. Грузит ее `build.load_score(имя)`. `common`, `instruments`,
   `data_*` - не партитуры, `checks.py` и `test_v2.py` их пропускают.
-- **Новая пьеса:** модуль в `score/`, строка в `SONGS` (симфония) или `COLLECTION` в `build.py`,
-  `checks.py --update` (в отчете она «новая»), статус прав - `docs/music.md`.
+- **Новая пьеса:** модуль в `score/`, имя файла на диске - в `NAMES` в `build.py`, на конечный диск -
+  в `DEMO` или `CLASSICS`; `checks.py --update` (в отчете она «новая»), статус прав - `docs/music.md`.
 - **`build.py`:**
   1. `tables.py` и строки интерфейса -> `player/gen_tables.a65`, `gen_const.a65` (после сборки
      тела - еще `gen_loader.a65`). Они перезаписываются каждой сборкой: руками не править.

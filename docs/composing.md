@@ -18,8 +18,8 @@ def song():
     return s
 ```
 
-Послушать: `python studio/listen.py имя --mp3`. На диск: `python studio/build.py --only имя --disk x.dsk`
-или добавить в `SONGS`/`COLLECTION` в `build.py`.
+Послушать: `python studio/listen.py имя --mp3`. На диск: `python studio/build.py --only имя --disk x.dsk`;
+на диск «Демо ЯЗС» или классики - имя файла в `NAMES` и модуль в `DEMO` или `CLASSICS` в `build.py`.
 
 ## Язык голоса
 

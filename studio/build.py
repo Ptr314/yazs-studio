@@ -5,11 +5,9 @@
 партитуры score/*.py -> *.YZ, все на копию disk/template840.dsk (дорожка 0 с
 «Быстропускалкой» и ДОС 3.3), образ - в dist/.
 
-    python studio/build.py                     симфония -> dist/yazs-player.dsk
-    python studio/build.py --set all           симфония и все пьесы -> dist/yazs-collection.dsk
+    python studio/build.py                     «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk
     python studio/build.py --set classics      переложения классики -> dist/yazs-classics.dsk
-    python studio/build.py --set demo          «Демо ЯЗС»: симфония, тур, свои пьесы -> dist/yazs-demo.dsk
-    python studio/build.py --only m2_adagio --disk x.dsk     только эти партитуры
+    python studio/build.py --only test_fx --disk x.dsk     только эти партитуры (любые из score/)
 
 Ключи: --out каталог (промежуточное: player.bin, .lst, .yz), --extra модуль, --no-hfe,
 --add файл.yz|файл.yzt (готовая мелодия или текстовый вид, yztext.py).
@@ -35,8 +33,9 @@ PLAYER_ADDR = 0x1800
 LOADER_ADDR = 0x4000        # файл ЯЗС-ПЛЕЕР грузится сюда (player/loader.a65)
 SONG_ADDR = 0x3F00
 
-# Партитуры в порядке на диске: модуль score/<имя>.py, имя файла на диске
-SONGS = [
+# Имена файлов на диске: модуль score/<имя>.py -> имя (docs/music.md). Партитуры без
+# имени здесь (test_fx) идут на диск под именем модуля
+NAMES = [
     ("m1_toccata", "1.ТОККАТА И ФУГА.YZ"),
     ("m2_adagio", "2.АДАЖИО.YZ"),
     ("m3_scherzo", "3.СКЕРЦО-ВАЛЬС.YZ"),
@@ -44,10 +43,6 @@ SONGS = [
     ("m5_synth", "5.ЭЛЕКТРИЧЕСКИЙ СОН.YZ"),
     ("m6_finale", "6.ФИНАЛ.YZ"),
     ("tour", "ТУР ПО ТЕМБРАМ.YZ"),
-]
-
-# Остальные пьесы (--set all): стили и переложения классики, docs/music.md
-COLLECTION = [
     ("boogie", "ЯЗС-БУГИ.YZ"),
     ("disco", "ЯЗС-ДИСКО.YZ"),
     ("manouche", "ЯЗС-МАНУШ.YZ"),
@@ -67,12 +62,12 @@ COLLECTION = [
     ("flowers", "ЧАЙКОВСКИЙ.ВАЛЬС ЦВЕТОВ.YZ"),
 ]
 
-# Диск классики (--set classics -> dist/yazs-classics.dsk): переложения из COLLECTION
-# по времени написания
+# Диск классики (--set classics -> dist/yazs-classics.dsk): переложения по времени
+# написания
 CLASSICS = ["vivaldi_spring", "vivaldi_summer", "vivaldi_autumn", "vivaldi_winter",
             "mountainking", "solveig", "anitra", "sugarplum", "flowers", "bumblebee"]
 
-# Диск «Демо ЯЗС» (--set demo -> dist/yazs-demo.dsk): симфония (вальс - в теплой версии),
+# Диск «Демо ЯЗС» (по умолчанию, dist/yazs-demo.dsk): симфония (вальс - в теплой версии),
 # тур по тембрам, свои пьесы, в конце - аранжировки чужих мелодий
 DEMO = ["m1_toccata", "m2_adagio", "m3_scherzo_warm", "m4_blues", "m5_synth", "m6_finale", "tour",
         "boogie", "disco", "manouche", "sbivka", "entertainer", "littlebrownjug", "ritz"]
@@ -227,22 +222,19 @@ def load_score(name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", choices=("symphony", "all", "classics", "demo"), default="symphony",
-                    help="symphony - симфония, all - и все пьесы, classics - классика, "
-                         "demo - «Демо ЯЗС»")
+    ap.add_argument("--set", choices=("demo", "classics"), default="demo",
+                    help="demo - «Демо ЯЗС», classics - классика")
     ap.add_argument("--out", default=os.path.join(OUT, "build"))
-    ap.add_argument("--disk", help="образ (по умолчанию dist/yazs-player.dsk, yazs-collection.dsk, "
-                                   "yazs-classics.dsk или yazs-demo.dsk)")
-    ap.add_argument("--only", action="append", help="только эти партитуры (имя модуля)")
+    ap.add_argument("--disk", help="образ (по умолчанию dist/yazs-demo.dsk или yazs-classics.dsk)")
+    ap.add_argument("--only", action="append",
+                    help="вместо набора - только эти партитуры (имя модуля, любой из score/)")
     ap.add_argument("--extra", action="append", default=[], help="добавить модуль score/ на диск")
     ap.add_argument("--add", action="append", default=[],
                     help="добавить на диск готовую мелодию: файл .yz или текстовый вид .yzt")
     ap.add_argument("--no-hfe", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    disk_path = a.disk or os.path.join(DIST, {"symphony": "yazs-player.dsk", "all": "yazs-collection.dsk",
-                                              "classics": "yazs-classics.dsk",
-                                              "demo": "yazs-demo.dsk"}[a.set])
+    disk_path = a.disk or os.path.join(DIST, {"demo": "yazs-demo.dsk", "classics": "yazs-classics.dsk"}[a.set])
 
     gen_sources()
     player = assemble(a.out)
@@ -250,13 +242,10 @@ def main():
         len(player[0]), PLAYER_ADDR, PLAYER_ADDR + len(player[0]) - 1, len(player[1]) - 4, LOADER_ADDR))
     disk = blank_disk(player)
 
-    if a.set in ("classics", "demo"):
-        names = dict(SONGS + COLLECTION)
-        songs = [(m, names[VARIANTS.get(m, m)]) for m in (CLASSICS if a.set == "classics" else DEMO)]
-    else:
-        songs = SONGS + (COLLECTION if a.set == "all" else [])
-    songs = [s for s in songs if not a.only or s[0] in a.only]
-    songs += [(m, m.upper().replace("_", "-") + ".YZ") for m in a.extra]
+    names = dict(NAMES)
+    modules = a.only or (CLASSICS if a.set == "classics" else DEMO)
+    songs = [(m, names.get(VARIANTS.get(m, m)) or m.upper().replace("_", "-") + ".YZ")
+             for m in modules + a.extra]
     total = 0
     for module, fname in songs:
         if not os.path.exists(os.path.join(HERE, "score", module + ".py")):
