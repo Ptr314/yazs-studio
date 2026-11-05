@@ -79,16 +79,10 @@ def analyse(wav, secs):
         print("тихие секунды (< -45 дБ):", quiet[:40])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("module")
-    ap.add_argument("--out", default=os.path.join(render.OUT, "listen"))
-    ap.add_argument("--mp3", action="store_true")
-    ap.add_argument("--start", type=int, default=0, help="начать с кадра (клавиша ВПРАВО)")
-    a = ap.parse_args()
-    outdir = os.path.abspath(a.out)
-    os.makedirs(outdir, exist_ok=True)
-    disk, info, stem = make_disk(a.module, outdir)
+def record(module, outdir):
+    """Диск с мелодией (make_disk), eCat3 играет ее на скорости MAX и пишет WAV с запасом
+    3 с: (путь WAV, сводка, вывод eCat3). Тишина в начале остается - trim"""
+    disk, info, stem = make_disk(module, outdir)
     secs = info["seconds"]
     wav = stem + ".wav"
     lines = [
@@ -113,6 +107,20 @@ def main():
         "EXIT",
     ]
     out = render.run(lines, "listen_" + stem, outdir, timeout=3600)
+    return os.path.join(outdir, wav), info, out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("module")
+    ap.add_argument("--out", default=os.path.join(render.OUT, "listen"))
+    ap.add_argument("--mp3", action="store_true")
+    ap.add_argument("--start", type=int, default=0, help="начать с кадра (клавиша ВПРАВО)")
+    a = ap.parse_args()
+    outdir = os.path.abspath(a.out)
+    os.makedirs(outdir, exist_ok=True)
+    wav, info, out = record(a.module, outdir)
+    secs = info["seconds"]
     nums = []
     for l in out.splitlines():
         if l.startswith("[yazs.irqs]"):
@@ -129,12 +137,12 @@ def main():
         print("тиков %d, взведений таймера %d, потеряно %d" % (
             nums[3] - nums[1], nums[2] - nums[0], lost))
     print(info)
-    print("срезано тишины в начале: %.2f с" % trim(os.path.join(outdir, wav)))
-    analyse(os.path.join(outdir, wav), secs)
+    print("срезано тишины в начале: %.2f с" % trim(wav))
+    analyse(wav, secs)
     if a.mp3:
         ff = shutil.which("ffmpeg") or os.path.join("C:\\DEV", "ffmpeg-n9.0-latest-win64-lgpl-9.0", "bin", "ffmpeg.exe")
-        mp3 = os.path.join(outdir, stem + ".mp3")
-        subprocess.run([ff, "-y", "-loglevel", "error", "-i", os.path.join(outdir, wav),
+        mp3 = os.path.splitext(wav)[0] + ".mp3"
+        subprocess.run([ff, "-y", "-loglevel", "error", "-i", wav,
                         "-codec:a", "libmp3lame", "-b:a", "192k", mp3], check=True)
         print("mp3:", mp3)
 

@@ -49,6 +49,7 @@ python studio/checks.py --update   записать суммы партитур 
 | `python studio/spectro.py a.wav от до a.png` | спектрограмма с нотной сеткой |
 | `python studio/mkdisk840.py диск.dsk` | каталог диска |
 | `python studio/sid2yz.py x.sid --stat / --frames В:С:N` | что использует мелодия SID, покадровые регистры |
+| `python studio/sidcompare.py x.sid [--wav эталон.wav] [--yz версия.yz]` | перевод SID против записи настоящего звука: спектрограммы, сходство нот и спектра по 5 с (`docs/SID.md`, «Сверка с эталоном») |
 
 Все, что гоняет эмулятор, пишет в `out/` (не в git). Живая отладка через MCP - `docs/ecat3.md`.
 

@@ -8,10 +8,11 @@
 1/50.125 с). Голоса SID 1-3 - тоновые каналы 1-3, ноты - по фронтам GATE:
 - высота по кадрам: нота + DET (1/16 полутона), арпеджио - макрос арпеджио
   инструмента, вибрато - макрос высоты (или вибрато движка), лиги без нового удара;
+  при синхронизации - частота ведущего голоса (heard);
 - инструмент на ноту: полосы - по волне и фильтру, огибающая - ADSR SID,
   разложенная по тикам на ступени D4+D5 / D5 / щипок D4 (с loud - и с D3);
-- шумовые ноты, «таблицы волн» ударных и ноты с падением на октаву - в ударные
-  6 (бочка, томы, малый) и 7 (тарелки);
+- шумовые ноты, «таблицы волн» ударных и ноты с падением на октаву (шум и
+  падение - вместе с отпусканием) - в ударные 6 (бочка, томы, малый) и 7 (тарелки);
 - chorus: каналы 4-5 повторяют ноты импульса с ШИМ с расстройкой.
 """
 
@@ -38,6 +39,8 @@ LEVELS = [(D3 | D4 | D5, 0.0), (D3 | D5, -3.5), (D4 | D5, -9.0), (D5, -12.5)]
 # 6581: срез по регистру (0-2047) - грубая кривая reSID; 8580 - линейная
 FC6581 = [(0, 220), (256, 240), (512, 600), (768, 1500), (1024, 3500), (1280, 6000),
           (1536, 9000), (2047, 12000)]
+# синхронизация медленным ведомым: тише этой доли амплитуды голос считается молчащим
+AMP_MIN = 0.3
 
 
 def db(x):
@@ -205,6 +208,40 @@ def agat_text(t):
     return "".join(c if c in tables.AGAT else " " for c in t.upper())
 
 
+def heard(d, v):
+    """Что слышно у голоса v по кадрам: (частота, доля амплитуды, слышен ли выход).
+    - Синхронизация: фаза сбрасывается с периодом ведущего голоса (голос 1 - от 3, 2 - от 1,
+      3 - от 2), поэтому высота - его. Ведомый медленнее ведущего (r = f/fm < 1) не проходит
+      цикл: треугольник поднимается до 2r, пила - до r, импульс не доходит до ширины - тишина.
+      Так считаются только ноты, где синхронизация - большая часть кадров под GATE: одиночный
+      кадр в ударном (у Mike Brown) высоту ноты не меняет.
+    - Голос через фильтр, у которого не выбран ни один выход (режим 0), не слышен; голос 3 при
+      3OFF ($D418 D7) не слышен, если идет мимо фильтра."""
+    m = (v + 2) % 3
+    ctrl = d.ctrl[v].astype(np.int32)
+    f = d.freq[v].astype(np.int64)
+    fm = d.freq[m].astype(np.int64)
+    sync = ((ctrl & 2) != 0) & ((d.ctrl[m].astype(np.int32) & 8) == 0) & (fm > 0)
+    in_note = np.zeros(len(f), bool)
+    for s, g, nxt in d.notes(v):
+        if sync[s:max(g, s + 1)].mean() > 0.5:
+            in_note[s:nxt] = True
+    sync &= in_note
+    freq = np.where(sync, fm, f)
+    r = np.where(sync, f / np.maximum(fm, 1).astype(float), 1.0)
+    w = ctrl >> 4
+    pw = (d.pw[v] & 0xFFF) / 4096.0
+    amp = np.where(~sync, 1.0,
+                   np.where((w & 2) != 0, np.minimum(1.0, r),
+                            np.where((w & 1) != 0, np.minimum(1.0, 2 * r),
+                                     np.where(w == 4, (r > pw + 0.02).astype(float), 1.0))))
+    routed = ((d.route >> v) & 1).astype(bool)
+    out = ~(routed & (d.mode == 0))
+    if v == 2:
+        out &= ~((d.v3off == 1) & ~routed)
+    return freq, amp, out
+
+
 class Converter(object):
     """dump - c64.Dump, sf - psid.SidFile; end - сколько кадров переводить;
     chorus - False, True (два голоса, где больше ШИМ) или номера голосов [1, 2]"""
@@ -212,6 +249,7 @@ class Converter(object):
     def __init__(self, dump, sf, chorus=False, end=None, loud=False, version=None):
         self.loud = loud
         self.d = dump
+        self.freq, self.amp, self.out = zip(*[heard(dump, v) for v in range(3)])
         self.m8580 = "8580" in sf.model and "6581" not in sf.model
         self.chorus = chorus
         self.end = end or dump.frames
@@ -269,16 +307,31 @@ class Converter(object):
             f = routed[len(routed) // 2]
             mode = int(d.mode[f])
             cut = fc_hz(int(d.fc[f]), self.m8580)
-            if mode & 1:              # LP
+            # выход фильтра - сумма выбранных: LP+BP - тот же НЧ, BP+HP - ВЧ, LP+HP -
+            # режекторный (вырезает узкую полосу у среза), LP+BP+HP - почти без фильтра:
+            # последние два полосы не меняют
+            if mode in (1, 3):        # LP
                 if cut < 2 * f0:
                     bus = LF
                 elif cut < 5 * f0:
                     bus = (bus & (LF | MF)) or LF
-            elif mode & 2:            # BP
+            elif mode == 2:           # BP
                 bus = MF
-            elif mode & 4:            # HP
+            elif mode in (4, 6):      # HP
                 bus = MF | HF if cut < 2 * f0 else HF
         return c, bus
+
+    @staticmethod
+    def falling(p):
+        """Высота (полутона по кадрам ноты с отпусканием) падает почти каждый кадр и до
+        конца: удар. Не удар:
+        - нота, которая после «подбоя» встает на высоту (бас Тела: D#3, B1, затем D#1 ровно);
+        - арпеджио: высота возвращается вверх или держится ступенями (аккорды Тела
+          F5 F5 C5 C5 G4 G4 F4 F4, вверх - уже на отпускании)"""
+        steps = list(zip(p, p[1:]))
+        if not steps or any(b - a > 0.5 for a, b in steps):
+            return False
+        return sum(1 for a, b in steps if a - b < 0.1) * 3 <= len(steps)
 
     def drum(self, ch, row, prio, preset):
         if ch == 5 and not self.loud:
@@ -334,7 +387,9 @@ class Converter(object):
 
     def voice(self, v, ch):
         d, s_ = self.d, self.song
-        ctrl, freq = d.ctrl[v], d.freq[v]
+        # freq - слышимая высота (при синхронизации - ведущего голоса), raw - регистр голоса
+        ctrl, freq, raw = d.ctrl[v], self.freq[v], d.freq[v]
+        amp, out = self.amp[v], self.out[v]
         cur_det, cur_ins = 0, None
         sounding_until = -1
         for s, g, nxt in d.notes(v):
@@ -344,17 +399,27 @@ class Converter(object):
             g = max(min(g, nxt), s + 1)
             gated = list(range(s, g))
             waves = [int(ctrl[f]) >> 4 for f in gated]
-            noise = [f for f, w in zip(gated, waves) if w & 8]
-            tonal = [f for f, w in zip(gated, waves) if w and not w & 8 and not ctrl[f] & 8 and freq[f] > 0]
+            noise = [f for f, w in zip(gated, waves) if w & 8 and out[f]]
+            tonal = [f for f, w in zip(gated, waves) if w and not w & 8 and not ctrl[f] & 8 and freq[f] > 0
+                     and out[f] and amp[f] >= AMP_MIN]
             ad, sr = int(d.ad[v][s]), int(d.sr[v][s])
             dur_ms = (g - s) * 1000 / FPS + DR[sr & 15] * 0.3
-            n8 = sum(1 for f in noise if f < s + 8)
+            # отпускание, пока не стихло на ~24 дБ: тарелка Тела - кадр шума, кадр тона и
+            # шум на долгом отпускании
+            after = list(range(g, min(nxt, g + int(DR[sr & 15] * 0.5 * FPS / 1000.0) + 1)))
+            noise_after = [f for f in after if (int(ctrl[f]) >> 4) & 8 and out[f]]
+            # шум только на отпускании (Joe Blade 2 № 3: пила D3, затем шум) ударным не делает
+            n8 = sum(1 for f in noise + noise_after if f < s + 8) if noise else 0
             drum = None
             # --- ударные ---
-            if len(noise) * 2 >= len(gated):
-                nf = int(np.median([freq[f] for f in noise]))
+            if noise and (len(noise) + len(noise_after)) * 2 >= len(gated) + len(after):
+                nf = int(np.median([raw[f] for f in noise + noise_after]))
                 if nf < 0x400:
                     drum = (5, 3, 0x08)                 # «стук» шума на нулевой частоте - бочка
+                elif nf >= 0x6000 and any(hz(int(raw[f])) < 400 for f in tonal):
+                    # высокий шум с тоном корпуса ниже 400 Гц - малый (у Тела шум и импульс
+                    # G3); тарелки и хай-хэт - шум с кольцевой A5 или без тона
+                    drum = (5, 2, 0x0E)
                 elif nf >= 0x6000:
                     drum = (6, 2, 0x0B) if dur_ms > 250 else (6, 1, 0x03)
                 elif nf >= 0x2000:
@@ -375,7 +440,11 @@ class Converter(object):
                         drum = (5, 2, 0x0E)
                     else:
                         drum = (5, 2, 0x09 if hz_t[0] < 200 else (0x0B if hz_t[0] < 400 else 0x0D))
-                elif len(gated) <= 15 and min(p[:8]) - p[0] <= -12:
+                elif len(gated) <= 15 and min(p[:8]) - p[0] <= -12 and (len(p) <= 4 or self.falling(
+                        [self.semi(int(raw[f])) for f in tonal + after if raw[f] > 0 and out[f] and
+                         int(ctrl[f]) >> 4 and not (int(ctrl[f]) >> 4) & 8 and not ctrl[f] & 8])):
+                    # падение на октаву за 8 кадров; у нот длиннее 4 кадров высота (с
+                    # отпусканием, по регистру голоса) должна падать до конца
                     f0, f1 = hz_t[0], hz_t[min(7, len(hz_t) - 1)]
                     preset = 0x08 if (f1 < 80 or f0 < 200) else (0x09 if f0 < 300 else (0x0B if f0 < 500 else 0x0D))
                     drum = (5, 3 if preset == 0x08 else 2, preset)
@@ -454,7 +523,7 @@ class Converter(object):
             kind = "frame" if mot is None else ("legato" if legs else (insmot[0] if insmot else mot[0]))
             for f in range(on, g):
                 w_ = int(ctrl[f]) >> 4
-                if freq[f] > 0 and w_ and not w_ & 8 and not ctrl[f] & 8:
+                if freq[f] > 0 and w_ and not w_ & 8 and not ctrl[f] & 8 and out[f] and amp[f] >= AMP_MIN:
                     self.tonal_rows[ch].add(f)
                     self.row_kind[ch][f] = kind
             if mot is None:
@@ -611,7 +680,6 @@ def verify(data, conv, end):
     errs, miss, extra, exact_bad, n_plan = [], 0, 0, 0, 0
     by_kind = {}
     row = 0
-    d = conv.d
     while row < end:
         tk = p.tick
         if not p.step():
@@ -625,7 +693,7 @@ def verify(data, conv, end):
                     miss += 1
                     continue
                 f_yz = tables.CLOCK / float(t.last_per)
-                f_sid = hz(int(d.freq[ch][row]))
+                f_sid = hz(int(conv.freq[ch][row]))
                 if f_sid > 0:
                     e_ = 1200 * math.log2(f_yz / f_sid)
                     errs.append(e_)
