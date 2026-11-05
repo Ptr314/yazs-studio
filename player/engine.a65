@@ -120,20 +120,48 @@ es_ch       lda #0
             jmp load_frame
 
 ; --- Кадр A (младший) / Y (старший): число строк, указатели и банки паттернов ---
-; Вход в кадр повтора заголовка - запомнить время (ltime): при повторе оно
-; вернется, и часы покажут место в мелодии, а не бесконечный счет
+; Время - место в мелодии: время входа в кадр берется из таблицы (ft_build), так
+; что переход по кадрам, повтор и JUMP показывают место, а не счет от начала игры.
+; Без таблицы при входе в кадр повтора заголовка время запоминается (ltime): при
+; повторе оно вернется, и часы покажут место в мелодии, а не бесконечный счет
 load_frame  sta frame
             sty frameh
-            cmp hloop
+            ldx ftok
+            beq lf_old
+            asl a               ; zt = ftabpg:$FC + 4 * кадр (кадров < $4000)
+            sta zt
+            tya
+            rol a
+            asl zt
+            rol a
+            tax
+            lda zt
+            clc
+            adc #$FC
+            sta zt
+            txa
+            adc ftabpg
+            sta zt+1
+            ldy ftbank          ; окно - на банк таблицы (parse_ch вернет свой)
+            sta MAPWIN,y
+            sty curbank
+            ldy #3              ; secacc (2) и secs (2) идут подряд
+lf_tt       lda (zt),y
+            sta secacc,y
+            dey
+            bpl lf_tt
+            bmi lf_fr
+lf_old      cmp hloop
             bne lf_nl
             cpy hlooph
             bne lf_nl
-            ldx #3              ; secacc (2) и secs (2) идут подряд
+            ldx #3
 lf_t        lda secacc,x
             sta ltime,x
             dex
             bpl lf_t
-            lda frame
+lf_fr       lda frame
+            ldy frameh
 lf_nl       jsr frame_ptr
             ldy #0
             lda (zt),y
@@ -393,7 +421,13 @@ et_tt1      jsr tone_tick
 
 hloop       db 0                ; кадр повтора из заголовка ($FF - нет)
 hlooph      db 0
-ltime       ds 4                ; secacc и secs при входе в кадр повтора
+ltime       ds 4                ; secacc и secs при входе в кадр повтора (без таблицы)
+ftok        db 0                ; 1 - таблица времени кадров построена
+ftabpg      db 0                ; она с ftabpg:$FC (load_file: сразу за мелодией)
+ftlim       db 0                ; и должна кончиться ниже ftlim:00
+ftbank      db 0                ; банк окна для нее (за блоками v2; иначе MAINBANK)
+ftx         db 0                ; ft_build: третий байт secacc
+fev         db 0                ; ft_build: в кадре есть SPEED или TEMPO
 
 ; Секунды: каждый тик N / 7980 секунды
 count_secs  lda secacc
@@ -415,6 +449,260 @@ cs_1        lda secacc
             bne cs_2
             inc secs+1
 cs_2        rts
+
+; --- Таблица времени кадров ---
+; С ftabpg:$FC - по 4 байта на кадр: secacc и secs, с которыми движок входит в
+; кадр, если мелодия играет подряд с начала. Место выбирает load_file: сразу за
+; мелодией; у v2 с блоками - в окне на банке ftbank за последним блоком (основная
+; часть обычно занимает память до окна). Счет тот же, что в eng_tick:
+; - SPEED и TEMPO строки берутся из всех каналов, при нескольких в строке -
+;   последний (каналы разбираются по порядку);
+; - строка - speed тиков, но не меньше одного (tick 1 >= speed); тик - N / 7980 с;
+; - кадр кончается после строки с BREAK или JUMP; следующий для времени - по
+;   порядку, куда бы ни вел JUMP. TEMPO 0 не учитывается.
+; Строится после load_file и eng_start (указатели таблиц, число кадров), до
+; игры: playing = 0. Портит переменные движка (кадр, строки, speed, ntimer,
+; время) - второй eng_start ставит их заново. Не помещается ниже ftlim:00 -
+; ftok = 0: время, как раньше, идет от начала игры.
+; По строкам кадра: BUF - тиков из SPEED (0 - нет), TSBUF - N из TEMPO (0 - нет);
+; после load_file оба свободны
+fbrk        equ brkf            ; ft_build: строк кадра до BREAK/JUMP включительно
+fsn         equ str             ; ft_build: тиков строки * N
+
+fb_r        rts                 ; не помещается: ftok = 0 (load_file)
+ft_build    lda framesh         ; 4 * кадров байт с ftabpg:$FC - ниже ftlim:00?
+            cmp #$40
+            bcs fb_r
+            lda frames
+            asl a
+            sta t0
+            lda framesh
+            rol a
+            asl t0
+            rol a
+            tax
+            lda t0
+            clc
+            adc #$FC
+            txa
+            adc ftabpg
+            bcs fb_r
+            cmp ftlim
+            bcs fb_r
+            lda #$FC
+            sta bufp
+            lda ftabpg
+            sta bufp+1
+            ldx #0
+            txa
+            sta ftx
+fb_z        sta BUF,x
+            sta TSBUF,x
+            inx
+            bne fb_z
+            ; от eng_start: кадр 0, время 0, speed и ntimer из заголовка
+fb_frame    ldy ftbank          ; время входа в кадр (окно - на банк таблицы)
+            sta MAPWIN,y
+            sty curbank
+            ldy #3
+fb_w        lda secacc,y
+            sta (bufp),y
+            dey
+            bpl fb_w
+            lda bufp
+            clc
+            adc #4
+            sta bufp
+            bcc fb_w1
+            inc bufp+1
+fb_w1       lda frame
+            ldy frameh
+            jsr frame_ptr
+            ldy #0
+            lda (zt),y
+            sta frows
+            sta fbrk
+            sty ch
+            sty fev
+            ; каналы: SPEED и TEMPO - в BUF/TSBUF по строкам, BREAK и JUMP - fbrk
+fb_ch       ldy ch
+            jsr pat_ptr
+            tay
+            sta MAPWIN,y
+            sty curbank
+            lda #0
+            sta row
+            tay                 ; Y - смещение в паттерне
+fb_row      lda row
+            cmp frows
+            bcs fb_nch
+fb_cmd      lda (tmp16),y       ; fb_get без вызова: здесь проходит каждый байт
+            iny
+            bne fb_c1
+            inc tmp16+1
+fb_c1       cmp #$80
+            bcs fb_term
+            cmp #$62
+            bcc fb_cmd          ; нота, $60, $61
+            cmp #$64
+            bcs fb_fx
+            jsr fb_get          ; параметр $62 и $63
+            bcc fb_cmd          ; C = 0: fb_get его не трогает
+fb_fx       sbc #$64            ; C = 1
+            tax
+            jsr fb_get          ; параметр эффекта X
+            cpx #10
+            bcc fb_cmd          ; 0-9 - эффекты канала, на время не влияют
+            beq fb_spd
+            cpx #11
+            beq fb_tmp
+            cpx #12
+            beq fb_brk
+            cpx #16
+            bne fb_cmd
+fb_brk      ldx row             ; BREAK, JUMP: кадр кончится после этой строки
+            inx
+            cpx fbrk
+            bcs fb_cmd
+            stx fbrk
+            bcc fb_cmd
+fb_spd      ldx row
+            cmp #1              ; тиков - не меньше одного
+            bcs fb_s1
+            lda #1
+fb_s1       sta BUF,x
+            sta fev
+            jmp fb_cmd
+fb_tmp      cmp #1              ; TEMPO 0 не учитывается
+            bcc fb_cmd
+            ldx row
+            sta TSBUF,x
+            sta fev
+            jmp fb_cmd
+fb_term     and #$7F            ; конец строки и пропуск
+            sec
+            adc row
+            sta row
+            bcc fb_row          ; за 255 - канал кончился
+fb_nch      inc ch
+            lda ch
+            cmp #8
+            beq fb_rows
+            jmp fb_ch
+fb_rows
+            ; строки до BREAK/JUMP (fbrk <= frows): время (ftx:secacc) += тиков * N
+            jsr fb_sn
+            lda fev
+            bne fb_slow
+            ; SPEED и TEMPO в кадре нет: += fbrk * fsn, сдвигами (не больше 2^24)
+            lda fbrk
+            sta t0
+            lda #0
+            sta t1              ; fsn, t1 - 24 бита
+fb_m        lsr t0
+            bcc fb_m1
+            lda secacc
+            clc
+            adc fsn
+            sta secacc
+            lda secacc+1
+            adc fsn+1
+            sta secacc+1
+            lda ftx
+            adc t1
+            sta ftx
+fb_m1       asl fsn
+            rol fsn+1
+            rol t1
+            lda t0
+            bne fb_m
+            beq fb_norm
+fb_slow     ldx #0
+fb_rl       cpx fbrk
+            bcs fb_cl
+            lda BUF,x
+            ora TSBUF,x
+            beq fb_add
+            lda BUF,x
+            beq fb_r1
+            sta speed
+fb_r1       lda TSBUF,x
+            beq fb_r2
+            sta ntimer
+fb_r2       lda #0              ; BUF и TSBUF - пустые к следующему кадру
+            sta BUF,x
+            sta TSBUF,x
+            jsr fb_sn
+fb_add      lda secacc
+            clc
+            adc fsn
+            sta secacc
+            lda secacc+1
+            adc fsn+1
+            sta secacc+1
+            bcc fb_a1
+            inc ftx
+fb_a1       inx
+            bne fb_rl
+fb_cl       cpx frows           ; после BREAK/JUMP строки не играются: только очистить
+            bcs fb_norm
+            lda #0
+            sta BUF,x
+            sta TSBUF,x
+            inx
+            bne fb_cl
+fb_norm     lda secacc          ; по 7980 - в секунды (ftx станет 0)
+            sec
+            sbc #lo(7980)
+            tax
+            lda secacc+1
+            sbc #hi(7980)
+            tay
+            lda ftx
+            sbc #0
+            bcc fb_next
+            sta ftx
+            sty secacc+1
+            stx secacc
+            inc secs
+            bne fb_norm
+            inc secs+1
+            bne fb_norm
+fb_next     inc frame
+            bne fb_n1
+            inc frameh
+fb_n1       lda frame
+            cmp frames
+            lda frameh
+            sbc framesh
+            bcs fb_ok
+            jmp fb_frame
+fb_ok       inc ftok
+            rts
+
+; Байт паттерна (tmp16),Y и Y дальше; C не меняется
+fb_get      lda (tmp16),y
+            iny
+            bne fg_1
+            inc tmp16+1
+fg_1        rts
+
+; fsn = тиков строки (speed, не меньше одного) * ntimer
+fb_sn       lda #0
+            sta fsn
+            sta fsn+1
+            ldy speed
+            bne fs_1
+            iny
+fs_1        lda fsn
+            clc
+            adc ntimer
+            sta fsn
+            bcc fs_2
+            inc fsn+1
+fs_2        dey
+            bne fs_1
+            rts
 
 ; --- Разбор строки канала ch (X = ch) ---
 parse_ch    lda c_wait,x

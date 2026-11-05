@@ -293,55 +293,24 @@ songtop     db SONGTOP          ; страница, с которой мелод
 blkmax      db 9                ; блоков .YZ v2 не больше blkmax - 1 (при ДОС - 0)
 
 ; Резидентная часть ДОС $0600-$0FFF <-> DOSSAVE. Без нулевой страницы: восстановление
-; идет уже после нее
-dos_save    ldx #0
-dsv_l       lda $0600,x
-            sta DOSSAVE,x
-            lda $0700,x
-            sta DOSSAVE+$100,x
-            lda $0800,x
-            sta DOSSAVE+$200,x
-            lda $0900,x
-            sta DOSSAVE+$300,x
-            lda $0A00,x
-            sta DOSSAVE+$400,x
-            lda $0B00,x
-            sta DOSSAVE+$500,x
-            lda $0C00,x
-            sta DOSSAVE+$600,x
-            lda $0D00,x
-            sta DOSSAVE+$700,x
-            lda $0E00,x
-            sta DOSSAVE+$800,x
-            lda $0F00,x
-            sta DOSSAVE+$900,x
-            inx
-            bne dsv_l
-            rts
-
-dos_restore ldx #0
-drs_l       lda DOSSAVE,x
-            sta $0600,x
-            lda DOSSAVE+$100,x
-            sta $0700,x
-            lda DOSSAVE+$200,x
-            sta $0800,x
-            lda DOSSAVE+$300,x
-            sta $0900,x
-            lda DOSSAVE+$400,x
-            sta $0A00,x
-            lda DOSSAVE+$500,x
-            sta $0B00,x
-            lda DOSSAVE+$600,x
-            sta $0C00,x
-            lda DOSSAVE+$700,x
-            sta $0D00,x
-            lda DOSSAVE+$800,x
-            sta $0E00,x
-            lda DOSSAVE+$900,x
-            sta $0F00,x
-            inx
-            bne drs_l
+; идет уже после нее. 10 страниц, их адреса - в самих командах копирования
+dos_save    lda #$06
+            ldx #hi(DOSSAVE)
+            bne dsv_go
+dos_restore lda #hi(DOSSAVE)
+            ldx #$06
+dsv_go      sta dsv_r+2
+            stx dsv_w+2
+            ldx #10
+dsv_p       ldy #0
+dsv_r       lda $0600,y
+dsv_w       sta DOSSAVE,y
+            iny
+            bne dsv_r
+            inc dsv_r+2
+            inc dsv_w+2
+            dex
+            bne dsv_p
             rts
 
 ; === Ячейка =================================================================

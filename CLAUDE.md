@@ -128,8 +128,8 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   копией `.ecat.ini`. `deploy/ecat.ini` eCat3 не трогать.
 - **`WAIT` считает эмулированное время:** не загрузилась машина - ждет вечно. В MCP ставить
   `timeout_ms`. Снимки экрана - при остановленном процессоре (`COMMAND cpu.stop()`).
-- **«Потеряно N тиков»** в первые секунды у больших файлов - загрузка с диска, не перегруз
-  (`studio/lostticks.py`).
+- **«Потеряно N тиков»** в первые секунды у больших файлов - загрузка с диска и таблица времени
+  кадров (`docs/player.md`, «Время на экране»), не перегруз (`studio/lostticks.py`).
 - **Диск библиотеки eCat3** (`library/agat/yazs-player.dsk`) и тест `work-agat-9-yazs-player`:
   - `studio/build.py --to-ecat3`, затем тест в eCat3 (`docs/ecat3.md`);
   - эталоны перезаписываются там, коммит - в eCat3;

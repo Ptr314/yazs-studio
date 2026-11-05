@@ -164,10 +164,11 @@ def assemble(out):
     """Тело плеера (с $1800) и загрузчик перед ним: (тело, файл ЯЗС-ПЛЕЕР для диска)"""
     data = as65("player.a65", out, "player")
     pages = (len(data) + 255) // 256
-    # загрузчик копирует тело целыми страницами: до $3EFC (тело B-файла мелодии)
-    end = PLAYER_ADDR + pages * 256
+    # Тело - до $3EFB: с $3EFC грузится тело B-файла мелодии. Загрузчик копирует
+    # целыми страницами, хвост последней (до $3EFF) затрет мелодия - он пустой
+    end = PLAYER_ADDR + len(data)
     if end > SONG_ADDR - 4:
-        sys.exit("плеер %d байт (%d страниц) заходит на мелодию ($%04X)" % (len(data), pages, end))
+        sys.exit("плеер %d байт заходит на мелодию ($%04X)" % (len(data), end))
     with open(os.path.join(PLAYER, "gen_loader.a65"), "w", encoding="utf-8") as f:
         f.write("; Сгенерировано build.py - не править\nPLPAGES     equ %d\n" % pages)
     loader = as65("loader.a65", out, "loader")

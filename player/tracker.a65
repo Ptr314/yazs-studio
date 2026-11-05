@@ -21,6 +21,8 @@ trkframeh   equ $86
 trk_draw    sta $C78A           ; АЦР-64, $1000
             sta $C05B           ; палитра 3: зеленая
             sta $C058
+            lda #$80            ; строки и числа (putx) - по байту на знак
+            sta scr64
             lda #lo(SCREEN)
             sta zt
             lda #hi(SCREEN)
@@ -41,7 +43,7 @@ td_1        sta (zt),y
             jsr at64
             lda #lo(s_header)
             ldy #hi(s_header)
-            jsr print64
+            jsr print
             ldx #0
             ldy #32
             jsr at64
@@ -50,25 +52,25 @@ td_1        sta (zt),y
             lda #hi(YZ+4)
             sta str+1
             ldx #30
-            jsr putn64
+            jsr putn
             ldx #2
             ldy #0
             jsr at64
             lda #lo(s_trkcols)
             ldy #hi(s_trkcols)
-            jsr print64
+            jsr print
             ldx #31
             ldy #0
             jsr at64
             lda #lo(s_playhelp)
             ldy #hi(s_playhelp)
-            jsr print64
+            jsr print
             ldx #1
             ldy #32
             jsr at64
             lda #lo(s_playhelp2)
             ldy #hi(s_playhelp2)
-            jsr print64
+            jsr print
             lda #$FF
             sta trkframe
             sta trkframeh
@@ -91,71 +93,8 @@ at64        lda rowlo,x
             inc scr+1
 a64_1       rts
 
-putc64      ldy #0
-            sta (scr),y
-            inc scr
-            bne p64_1
-            inc scr+1
-p64_1       rts
-
-print64     sta str
-            sty str+1
-pr64_l      ldy #0
-            lda (str),y
-            beq pr64_r
-            jsr putc64
-            inc str
-            bne pr64_l
-            inc str+1
-            bne pr64_l
-pr64_r      rts
-
-putn64      ldy #0
-            lda (str),y
-            jsr putc64
-            inc str
-            bne pn64_1
-            inc str+1
-pn64_1      dex
-            bne putn64
-            rts
-
-hex64       pha
-            lsr a
-            lsr a
-            lsr a
-            lsr a
-            jsr hexd64
-            pla
-            and #$0F
-hexd64      cmp #10
-            bcc h64_1
-            adc #6
-h64_1       adc #$B0
-            jmp putc64
-
-dec3_64     ldx #$B0
-d64_1       cmp #100
-            bcc d64_2
-            sbc #100
-            inx
-            bne d64_1
-d64_2       pha
-            txa
-            jsr putc64
-            pla
-            ldx #$B0
-d64_3       cmp #10
-            bcc d64_4
-            sbc #10
-            inx
-            bne d64_3
-d64_4       pha
-            txa
-            jsr putc64
-            pla
-            ora #$B0
-            jmp putc64
+; Знаки - putc64 (ui.a65); строки и числа - общие print, putn, hex2, dec3, mmss:
+; при scr64 они выводят через него
 
 ; --- Тик вида ---
 trk_tick    ; новая страница?
@@ -206,29 +145,42 @@ tk_cl       ldx t1
 tk_cl1      sta (scr),y
             dey
             bpl tk_cl1
-            ; номер строки кадра (hex)
+            ; номер строки кадра (hex): + TRK_ROWS за каждую страницу до этой;
+            ; строки за концом кадра - без номера
             lda t1
             sec
             sbc #TRK_TOP
-            sta t3
-            lda trkpage
-            beq tk_cl2
-            lda t3
-            clc
+            ldx trkpage
+            beq tk_cl3
+tk_cl2      clc
             adc #TRK_ROWS
+            bcs tk_cl4          ; за 255 - кадр короче
+            dex
+            bne tk_cl2
+tk_cl3      cmp frows
+            bcs tk_cl4
             sta t3
-tk_cl2      ldx t1
+            ldx t1
             ldy #0
             jsr at64
             lda t3
-            jsr hex64
-            inc t1
+            jsr hex2
+tk_cl4      inc t1
             dec t2
             bne tk_cl
             jmp tk_adv
-tk_chan     sec
+            ; Разбор портит t0 (frame_ptr кладет туда кадр), а по t0 дальше ставится
+            ; указатель: строка вне 0..27 уводила at64 за таблицы rowlo/rowhi, и
+            ; запись шла в $C1xx (диспетчер памяти) или $C7xx (режим экрана)
+tk_chan     tax
+            lda t0              ; строка на странице
+            pha
+            txa
+            sec
             sbc #8
             jsr trk_decode
+            pla
+            sta t0
 tk_adv      inc trkphase
             lda trkphase
             cmp #15
@@ -273,7 +225,7 @@ tk_info     ; кадр и время в строке 1, раз в 8 тиков
             cmp #2
             bcs tk_f5
             lda frame
-            jsr dec3_64
+            jsr dec3
             jmp tk_f6
 tk_f5       jsr frame_dec       ; v2: пять цифр
             ldx #0
@@ -290,7 +242,7 @@ tk_f6
             sta tmp16
             lda secs+1
             sta tmp16+1
-            jsr mmss64
+            jsr mmss
 tk_fl       ; вспышка на ударах
             lda c_meter+5
             cmp #$FF
@@ -313,36 +265,6 @@ tk_fl1      lda trkflash
             sta $C05B
             sta $C058
 tk_r        rts
-
-mmss64      ldx #0
-m64_1       lda tmp16
-            sec
-            sbc #60
-            tay
-            lda tmp16+1
-            sbc #0
-            bcc m64_2
-            sta tmp16+1
-            sty tmp16
-            inx
-            bne m64_1
-m64_2       txa
-            jsr dec2_64
-            lda #$BA
-            jsr putc64
-            lda tmp16
-dec2_64     ldx #$B0
-d264_1      cmp #10
-            bcc d264_2
-            sbc #10
-            inx
-            bne d264_1
-d264_2      pha
-            txa
-            jsr putc64
-            pla
-            ora #$B0
-            jmp putc64
 
 ; Канал A страницы trkframe/trkpage: разобрать паттерн с начала кадра. Паттерн
 ; v2 может лежать в блоке: окно - на его банк (движок вернет свой сам)
@@ -409,7 +331,7 @@ dc_ins      ldy #0
             jsr dc_at
             bcs dc_cmd
             lda mval
-            jsr hex64
+            jsr hex2
             jmp dc_cmd
 dc_leg      ldy #0
             lda (str),y
@@ -433,7 +355,7 @@ dc_note     pha
             bcs dc_dr
             jsr dc_putnote
             jmp dc_cmd
-dc_dr       jsr hex64
+dc_dr       jsr hex2
             jmp dc_cmd
 dc_off      pha
             ldx #0

@@ -52,7 +52,19 @@ at          lda rowlo,x
             inc scr+1
 at_1        rts
 
-; Знак A с атрибутом attr
+; Знак A в режиме экрана: АЦР-64 (трекер) - putc64, иначе с атрибутом. Через
+; него выводят общие процедуры: строки, числа, время
+putx        bit scr64
+            bpl putc
+; Знак A (АЦР-64: байт на знак)
+putc64      ldy #0
+            sta (scr),y
+            inc scr
+            bne p64_1
+            inc scr+1
+p64_1       rts
+
+; Знак A с атрибутом attr (АЦР-32)
 putc        ldy #0
             sta (scr),y
             iny
@@ -71,7 +83,7 @@ puts        jsr poll_tick
 ps_l        ldy #0
             lda (str),y
             beq ps_r
-            jsr putc
+            jsr putx
             inc str
             bne ps_l
             inc str+1
@@ -87,7 +99,7 @@ print       sta str
 putn        ldy #0
             lda (str),y
             stx t3
-            jsr putc
+            jsr putx
             ldx t3
             inc str
             bne pn_1
@@ -98,6 +110,8 @@ pn_1        dex
 
 ; Экран АЦР-32 залить пробелами
 clrscr      sta $C70A
+            lda #0
+            sta scr64
             lda #lo(SCREEN)
             sta zt
             lda #hi(SCREEN)
@@ -139,10 +153,10 @@ d2_1        cmp #10
             bne d2_1
 d2_2        pha
             txa
-            jsr putc
+            jsr putx
             pla
             ora #$B0
-            jmp putc
+            jmp putx
 
 ; Три цифры A
 dec3        ldx #$B0
@@ -153,7 +167,7 @@ d3_1        cmp #100
             bne d3_1
 d3_2        pha
             txa
-            jsr putc
+            jsr putx
             pla
             jmp dec2
 
@@ -170,7 +184,7 @@ hexd        cmp #10
             bcc hx_1
             adc #6              ; C = 1: + 7
 hx_1        adc #$B0
-            jmp putc
+            jmp putx
 
 ; Секунды (tmp16) как ММ:СС
 mmss        ldx #0
@@ -188,7 +202,7 @@ ms_1        lda tmp16
 ms_2        txa
             jsr dec2
             lda #$BA            ; :
-            jsr putc
+            jsr putx
             lda tmp16
             jmp dec2
 
@@ -484,7 +498,7 @@ play_file   lda #0
             ldy #hi(s_loading)
             jsr print
             jsr load_file
-            bcc pf_ok
+            bcc pf_ld
             ldx #14
             ldy #6
             jsr at
@@ -501,6 +515,8 @@ pf_e1       jsr print
             lda #0
             sta playall
             rts
+pf_ld       jsr eng_start       ; указатели таблиц и число кадров - для ft_build
+            jsr ft_build        ; время входа в кадры (место в мелодии на экране)
 pf_ok       jsr eng_start       ; кадр повтора заголовка - в hloop, действует только с R
             jsr set_loop
             lda #1
@@ -642,17 +658,18 @@ sr_trk      ldx #31
             jsr at64
             lda #lo(s_rept)
             ldy #hi(s_rept)
-            jsr print64
+            jsr print
             lda #lo(s_on)
             ldy #hi(s_on)
             ldx rept
             bne sr_t1
             lda #lo(s_off)
             ldy #hi(s_off)
-sr_t1       jmp print64
+sr_t1       jmp print
 sr_r        rts
 
 rept        db 0                ; 1 - повтор включен (R)
+scr64       db 0                ; D7 = 1 - экран АЦР-64 (трекер): putx без атрибута
 
 ; Неизменная часть экрана воспроизведения
 draw_play   lda view

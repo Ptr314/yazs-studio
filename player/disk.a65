@@ -371,6 +371,7 @@ dp_1        asl dirp
 ; Мелодия - до страницы songtop: $C0, при ДОС $B6 (выше - сохраненная ДОС)
 load_file   lda #0
             sta toobig
+            sta ftok            ; таблица времени кадров - от прежней мелодии
             jsr map_main
             jsr dsk_on
             bcs lf_e1
@@ -425,7 +426,7 @@ lf_blk      lda zt+1
             clc
             adc #1
 lf_bank     cmp lblkend
-            bcs lf_err          ; блоков больше, чем в заголовке
+            bcs lf_e1           ; блоков больше, чем в заголовке
             sta lblk
             tay
             sta MAPWIN,y
@@ -457,7 +458,22 @@ lf_nx       lda tsidx
             ora ltrk
             beq lf_done
             jmp lf_ts
-lf_done     jsr dsk_off
+lf_done     lda zt+1            ; место таблице времени кадров (ft_build): без
+            ldx songtop         ; блоков - за последним сектором, до songtop
+            ldy lblk
+            beq lf_t5
+            lda #WINPG          ; v2 с блоками - в банке за последним блоком, с
+            ldx #WINEND         ; $A0FC; все банки заняты - за основной частью,
+            ldy lblkend         ; до окна
+            cpy #16
+            bcc lf_tb
+            lda lmainpg
+            ldx #WINPG
+lf_t5       ldy #MAINBANK
+lf_tb       sta ftabpg
+            stx ftlim
+            sty ftbank
+            jsr dsk_off
             jsr map_main
             lda YZ
             cmp #$59
