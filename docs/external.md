@@ -8,6 +8,7 @@
 | `sound/agat-sound-schem.pdf` | схема ЯЗС 5/2 (перерисованная; известные ошибки - `docs/card.md`) | agatcomp.ru, раздел ЯЗС |
 | `sound/YAZS_Test.wav` | запись авторежима SOUNDTEST с настоящей платы (неисправна: D0 ударного 6) | форум agatcomp |
 | `sound/soundtest.DSK`, `SOUNDTEST.bin`, `snd_test.bas`, `soundtest.txt`, `readme.txt` | диск SOUNDTEST с «Быстропускалкой» V2.0 - из него сделан `disk/template840.dsk` | форум agatcomp |
+| `sound/02-Sirius (Alan Parsons) (mp3cut.net).mp3` | отрывок 16 с записи «Сириуса» из демо НКЛ с живой платы: на 6.4-6.5 с - очередь ударного 7, по ней сделаны очереди `sbivka` | демо НКЛ (agatcomp.ru, DemoNCL), отрывок положен пользователем |
 | `sound/music-d.DSK` | демо НКЛ (песня), тот же, что `deploy/software/agat/music-d.dsk` в eCat3 | agatcomp.ru |
 | `sid-examples/*.sid` | 8 мелодий C64 (PSID v2) для конвертера: Alice in Wonderland, Frostbyte, Joe Blade 2, Legend Intro, Robin of the Wood, RoboCop 3, Saboteur II, Spellbound Dizzy | HVSC |
 | `notes-sources/entertainer.ly` | The Entertainer, набор Mutopia-2008/12/21-263 | mutopiaproject.org |

@@ -52,6 +52,7 @@ COLLECTION = [
     ("boogie", "ЯЗС-БУГИ.YZ"),
     ("disco", "ЯЗС-ДИСКО.YZ"),
     ("manouche", "ЯЗС-МАНУШ.YZ"),
+    ("sbivka", "ЯЗС-СБИВКА.YZ"),
     ("mountainking", "ГРИГ.ГОРНЫЙ КОРОЛЬ.YZ"),
     ("solveig", "ГРИГ.ПЕСНЯ СОЛЬВЕЙГ.YZ"),
     ("anitra", "ГРИГ.ТАНЕЦ АНИТРЫ.YZ"),
@@ -75,7 +76,7 @@ CLASSICS = ["vivaldi_spring", "vivaldi_summer", "vivaldi_autumn", "vivaldi_winte
 # Диск «Демо ЯЗС» (--set demo -> dist/yazs-demo.dsk): симфония (вальс - в теплой версии),
 # тур по тембрам, свои пьесы, в конце - аранжировки чужих мелодий
 DEMO = ["m1_toccata", "m2_adagio", "m3_scherzo_warm", "m4_blues", "m5_synth", "m6_finale", "tour",
-        "boogie", "disco", "manouche", "entertainer", "littlebrownjug", "ritz"]
+        "boogie", "disco", "manouche", "sbivka", "entertainer", "littlebrownjug", "ritz"]
 VARIANTS = {"m3_scherzo_warm": "m3_scherzo"}     # версия -> модуль, чье имя на диске
 
 STRINGS = {
