@@ -18,6 +18,9 @@
                      34 мелодий - несколько дисков ОБРАЗ-1, ОБРАЗ-2... по SID-файлам
     --min-notes N    пропустить мелодии меньше N нот тоновых голосов: звуковые эффекты игр
                      (у RoboCop 3 и Joe Blade 2 - по 0-3 ноты), с --all
+    --release-drums [ИМЯ,...]   ударные и по отпусканию: спад высоты и шум после снятия GATE
+                     (томы Mike Brown - бочка). С именами SID-файлов без .sid - только для них:
+                     --release-drums Joe_Blade_2 (так собираются диски примеров)
 
 После перевода модель движка (pyplay) играет .YZ и сверяет высоту каналов с
 регистрами SID по кадрам: медиана и 95-й процентиль отклонения в центах.
@@ -39,6 +42,14 @@ def disk_name(sf, song, chorus):
                              os.path.splitext(os.path.basename(sf.path))[0].replace("_", " "))
     tail = (" %d" % song if sf.songs > 1 else "") + (" ХОРУС" if chorus else "")
     return ("SID." + " ".join(base.split()))[:30 - len(tail) - 3].rstrip() + tail + ".YZ"
+
+
+def release_drums(a, sf):
+    """--release-drums: без имен - для всех файлов, с именами - для этих SID-файлов"""
+    if not a.release_drums:
+        return False
+    stem = os.path.splitext(os.path.basename(sf.path))[0].lower()
+    return a.release_drums == "all" or stem in [x.strip().lower() for x in a.release_drums.split(",")]
 
 
 def one(sf, song, a, results):
@@ -65,7 +76,8 @@ def one(sf, song, a, results):
     chorus = a.chorus
     if chorus and chorus != "auto":
         chorus = [int(x) for x in chorus.split(",")]
-    conv = convert.Converter(d, sf, chorus=chorus, end=end, loud=a.loud, version=a.version)
+    conv = convert.Converter(d, sf, chorus=chorus, end=end, loud=a.loud, version=a.version,
+                             release_drums=release_drums(a, sf))
     song_obj = conv.run()
     if conv.stats["tonal"] < a.min_notes:
         print("%s: %d нот - звуковой эффект, пропуск (--min-notes %d)" % (
@@ -115,6 +127,7 @@ def main():
     ap.add_argument("--frames")
     ap.add_argument("--disk")
     ap.add_argument("--min-notes", type=int, default=0)
+    ap.add_argument("--release-drums", nargs="?", const="all")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     results = []

@@ -11,7 +11,7 @@ docs/SID.md, «Сверка с эталоном».
     --song N         мелодия файла (по умолчанию - начальная)
     --seconds S      сколько сравнивать (по умолчанию - длина эталона, не больше 120 с)
     --yz ФАЙЛ        готовый .yz или .yzt вместо перевода (строка - кадр SID, как у sid2yz)
-    --loud, --chorus [1,3]   как у sid2yz
+    --loud, --chorus [1,3], --release-drums   как у sid2yz
     --out КАТАЛОГ    куда писать (по умолчанию out/sidcompare)
 
 Выход - картинка (спектрограммы эталона и перевода в одном масштабе, под ними сходство во
@@ -107,10 +107,10 @@ def segments(t, end, sim, active):
     return out
 
 
-def convert_sid(sf, song, seconds, outdir, loud=False, chorus=None):
+def convert_sid(sf, song, seconds, outdir, loud=False, chorus=None, release_drums=False):
     """Перевод первых seconds секунд без повтора: путь .yz"""
     d = c64.run(sf, song, seconds)
-    conv = convert.Converter(d, sf, chorus=chorus, end=d.frames, loud=loud)
+    conv = convert.Converter(d, sf, chorus=chorus, end=d.frames, loud=loud, release_drums=release_drums)
     data, _, _ = convert.build(conv.run(), d.frames)
     path = os.path.join(outdir, "%s.%02d.yz" % (os.path.splitext(os.path.basename(sf.path))[0], song))
     open(path, "wb").write(data)
@@ -187,6 +187,7 @@ def main():
     ap.add_argument("--yz")
     ap.add_argument("--loud", action="store_true")
     ap.add_argument("--chorus", nargs="?", const="auto")
+    ap.add_argument("--release-drums", action="store_true")
     ap.add_argument("--out", default=os.path.join(render.OUT, "sidcompare"))
     a = ap.parse_args()
     ref = a.wav or os.path.splitext(a.sid)[0] + ".wav"
@@ -202,7 +203,7 @@ def main():
         yz = os.path.abspath(a.yz)
     else:
         chorus = [int(v) for v in a.chorus.split(",")] if a.chorus and a.chorus != "auto" else a.chorus
-        yz = convert_sid(sf, song, seconds + 1, outdir, a.loud, chorus)
+        yz = convert_sid(sf, song, seconds + 1, outdir, a.loud, chorus, a.release_drums)
     data = yztext.load(yz)
     row_rate = tables.TIMER_CLOCK / float(data[66] * data[67])
     print("%s, мелодия %d: эталон %s, перевод %s" % (sf.name, song, ref, yz))

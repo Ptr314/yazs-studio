@@ -244,10 +244,13 @@ def heard(d, v):
 
 class Converter(object):
     """dump - c64.Dump, sf - psid.SidFile; end - сколько кадров переводить;
-    chorus - False, True (два голоса, где больше ШИМ) или номера голосов [1, 2]"""
+    chorus - False, True (два голоса, где больше ШИМ) или номера голосов [1, 2];
+    release_drums - ударные и по отпусканию: спад высоты и шум после снятия GATE (томы
+    Mike Brown в Joe Blade 2 - бочка, слушатели предпочли ее тоновому щелчку)"""
 
-    def __init__(self, dump, sf, chorus=False, end=None, loud=False, version=None):
+    def __init__(self, dump, sf, chorus=False, end=None, loud=False, version=None, release_drums=False):
         self.loud = loud
+        self.release_drums = release_drums
         self.d = dump
         self.freq, self.amp, self.out = zip(*[heard(dump, v) for v in range(3)])
         self.m8580 = "8580" in sf.model and "6581" not in sf.model
@@ -408,8 +411,9 @@ class Converter(object):
             # шум на долгом отпускании
             after = list(range(g, min(nxt, g + int(DR[sr & 15] * 0.5 * FPS / 1000.0) + 1)))
             noise_after = [f for f in after if (int(ctrl[f]) >> 4) & 8 and out[f]]
-            # шум только на отпускании (Joe Blade 2 № 3: пила D3, затем шум) ударным не делает
-            n8 = sum(1 for f in noise + noise_after if f < s + 8) if noise else 0
+            # шум на отпускании считается, если он есть и под GATE (с release_drums - всегда:
+            # Joe Blade 2 № 3, пила D3, затем шум - том)
+            n8 = sum(1 for f in noise + noise_after if f < s + 8) if noise or self.release_drums else 0
             drum = None
             # --- ударные ---
             if noise and (len(noise) + len(noise_after)) * 2 >= len(gated) + len(after):
@@ -431,6 +435,17 @@ class Converter(object):
             else:
                 p = [self.semi(int(freq[f])) for f in tonal]
                 hz_t = [hz(int(freq[f])) for f in tonal]
+                # падение на октаву за 8 кадров под GATE; у нот длиннее 4 кадров высота (с
+                # отпусканием, по регистру голоса) должна падать до конца. С release_drums падение
+                # считается и по отпусканию, если под GATE хотя бы два кадра тона (томы Mike Brown:
+                # шум, импульс G#3-E3 и спад до D1 на отпускании)
+                fr = [f for f in tonal + after if raw[f] > 0 and out[f] and int(ctrl[f]) >> 4 and
+                      not (int(ctrl[f]) >> 4) & 8 and not ctrl[f] & 8]
+                hz_r = [hz(int(raw[f])) for f in fr]
+                pr = [self.semi(int(raw[f])) for f in fr]
+                drop_g = min(p[:8]) - p[0] <= -12 and (len(p) <= 4 or self.falling(pr))
+                drop_r = self.release_drums and len(p) >= 2 and min(pr[:8]) - pr[0] <= -12 and \
+                    self.falling(pr)
                 if n8 >= 2:
                     # таблица волн ударного: шум и тон вперемешку
                     tail = hz_t[min(len(hz_t) - 1, 6)]
@@ -440,12 +455,10 @@ class Converter(object):
                         drum = (5, 2, 0x0E)
                     else:
                         drum = (5, 2, 0x09 if hz_t[0] < 200 else (0x0B if hz_t[0] < 400 else 0x0D))
-                elif len(gated) <= 15 and min(p[:8]) - p[0] <= -12 and (len(p) <= 4 or self.falling(
-                        [self.semi(int(raw[f])) for f in tonal + after if raw[f] > 0 and out[f] and
-                         int(ctrl[f]) >> 4 and not (int(ctrl[f]) >> 4) & 8 and not ctrl[f] & 8])):
-                    # падение на октаву за 8 кадров; у нот длиннее 4 кадров высота (с
-                    # отпусканием, по регистру голоса) должна падать до конца
-                    f0, f1 = hz_t[0], hz_t[min(7, len(hz_t) - 1)]
+                elif len(gated) <= 15 and (drop_g or drop_r):
+                    # пресет - по высоте под GATE, у падения по отпусканию - с ним
+                    hs = hz_r if drop_r and (len(p) > 4 or not drop_g) else hz_t
+                    f0, f1 = hs[0], hs[min(7, len(hs) - 1)]
                     preset = 0x08 if (f1 < 80 or f0 < 200) else (0x09 if f0 < 300 else (0x0B if f0 < 500 else 0x0D))
                     drum = (5, 3 if preset == 0x08 else 2, preset)
             if drum:
