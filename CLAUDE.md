@@ -17,7 +17,7 @@
 ## Команды
 
 ```
-python studio/checks.py --quick          суммы партитур и v1/v2 на модели (секунды)
+python studio/checks.py --quick          суммы партитур, v1/v2 на модели, встраиваемый плеер на 6502 (~10 с)
 python studio/checks.py                  + процессор SID, плеер в eCat3 против модели, запуск из ДОС (~40 с)
 python studio/checks.py --update         записать суммы после намеренной правки музыки
 python studio/test_v2.py m4_blues        v1/v2 на модели - одна партитура
@@ -29,6 +29,8 @@ python studio/yztext.py файл.yz|модуль|файл.yzt     текстов
 python studio/yzdisk.py диск.dsk --add файл.yzt      мелодия на готовый диск без AS65 (--extract, --delete)
 python studio/play.py файл.yzt --disk диск.dsk       мелодия в ОКОННОМ eCat3 (окно на экране владельца)
 python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск для отладки
+python studio/yz2asm.py файл.yz|файл.yzt|модуль ... -o music.a65 [--ecat3]   плеер для игр (docs/yz2asm.md)
+python studio/yzdemo.py мелодии ... -o dist/x.dsk --name X --ecat3   демо-диск на ИКП: меню на Бейсике-А9
 ```
 
 Остальные инструменты - таблица в `docs/development.md`. Модули `studio/` импортируют друг друга
@@ -65,6 +67,17 @@ python studio/build.py --only test_fx --disk out/dev.dsk --no-hfe    диск д
   - `sid2yz.py` -> `sid/`: свой эмулятор 6502 и окружение C64 гоняют проигрыватель мелодии;
   - `convert.py` ставит команды прямо в строки (`Song.put`, строка - кадр SID);
   - после перевода `pyplay` сверяет высоту с регистрами SID.
+- **Встраиваемый плеер** (`yz2asm.py`, `docs/yz2asm.md`):
+  - шаблон `player/yzplay.a65`, его `if F_*` разрешает `yz2asm.preprocess()`, имена `yz_` меняет
+    `--prefix`;
+  - модель этого плеера - `Game.simulate()`: шаблон и модель правятся вместе;
+  - часть шаблона под флагом должна собираться при любом сочетании других флагов (метка внутри
+    `if`, на которую прыгают из другого блока, уже ломала лиги без `TEMPO`);
+  - проверка - `checks.py --quick` (шаг 6, наборы `score/test_embed.py`), для времени и ячейки -
+    еще `--ecat3`.
+- **Бейсик-А9** (`agatbasic.py`, для `yzdemo.py`): токены - как у Applesoft (таблица DISK Commander,
+  `../DSKCommander`, `dsk_tools/src/bas_tokens.h`), знаки строк - код Агата XOR `$80`. `TYPE` eCat3
+  для набора программ не годится: теряет регистр кириллицы и глотает знаки.
 
 ## Общие правила
 

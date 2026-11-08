@@ -1,0 +1,436 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Встраиваемый плеер .YZ для игр (docs/yz2asm.md): шаблон для studio/yz2asm.py.
+; Строки if/else/endif разрешает yz2asm (флаги F_* - по мелодиям игры), имена
+; yz_ получают префикс игры; константы, переменные, словари и мелодии он пишет
+; сам. Вариант D опыта experiments/embed: поток каждого занятого канала.
+;
+; Вызов мелодии: jsr <вход> (вход - jsr yz_play, за ним данные мелодии). Звук
+; играет до конца, потом RTS. Портит A, X, Y; флаги (и I) - как до вызова.
+; F_SAVEZP: свои ячейки нулевой страницы плеер сохраняет на входе и
+; восстанавливает на выходе (вызов из Бейсика: CALL адрес).
+; Данные мелодии: [N таймера, если F_HDRN] и по слову на канал - адрес потока.
+; Поток канала:
+;   ddd nnnnn ($00-$DF)  нота nnnnn (31 - пауза), длительность yz_durt[ddd] тиков.
+;                        Тоновый канал: индекс словаря периодов; ударный - пресет
+;   $E0+i                инструмент i следующих нот (тоновый канал)
+;   $F0 n d              нота n (31 - пауза), d тиков
+;   $F1 адрес            вызов фразы (один уровень)
+;   $F2                  возврат из фразы
+;   $F3                  отпустить; у ударного - пресет с D4 = 0
+;   $F4                  заглушить; у ударного - как $F3
+;   $F5                  следующая нота - лигой (без удара)
+;   $F6 N                таймер N (TEMPO)
+;   $F7 n                период n словаря сейчас, без удара (скольжения, вибрато)
+;   $FF                  конец мелодии - только в первом потоке
+; Длительность - до следующего разбора канала; пауза ничего не меняет.
+; Время - как у движка Студии: удар через тик после разбора, в тик разбора у
+; звучащей ноты D4 = 0; после конца - yz_tailn тиков отпускания, потом тишина.
+
+yz_play
+    if F_SAVEZP
+            ldx #yz_zpn-1       ; нулевая страница вызвавшего (Бейсик, ДОС) - в сторону
+yz_zs       lda yz_ptr,x
+            sta yz_zsave,x
+            dex
+            bpl yz_zs
+    endif
+            pla
+            sta yz_ptr
+            pla
+            sta yz_ptr+1
+            php
+            sei
+            cld
+    if F_HDRN
+            ldy #1
+            lda (yz_ptr),y
+            iny
+    else
+            lda #yz_n
+            ldy #1
+    endif
+            ; ячейка: стоп, тишина, режим 3 всем счетчикам, таймер N, пуск
+            pha
+            jsr yz_stop
+            ldx #2
+yz_cwl      lda yz_cw,x
+            sta yz_card+3
+            sta yz_card+7
+            dex
+            bpl yz_cwl
+            pla
+            sta yz_card+6
+            lda #0
+            sta yz_card+6
+            sta yz_end
+            sta yz_tail
+            lda #$40            ; счет и таймер, внешнее прерывание запрещено
+            sta yz_card+15
+            lda #$80            ; сброс флага таймера
+            sta yz_card+7
+            ; адреса потоков каналов
+            ldx #0
+yz_hl       lda (yz_ptr),y
+            sta yz_chp,x
+            iny
+            lda (yz_ptr),y
+            sta yz_chp+1,x
+            iny
+            inx
+            inx
+            cpx #yz_nch2
+            bne yz_hl
+            ; каналы: ожидание, удар, состояние, регистр (и лига) - 0, период - не писался
+            ldx #yz_zlen-1
+            lda #0
+yz_zl       sta yz_vars,x
+            dex
+            bpl yz_zl
+            ldx #yz_nch2-1
+            lda #$FF
+yz_fl       sta yz_lnote,x
+            dex
+            bpl yz_fl
+
+; --- Тик ---
+yz_tick     lda yz_card         ; ждать флаг таймера
+            bpl yz_tick
+            lda #$80
+            sta yz_card+7
+    if F_KEY
+            lda $C000           ; клавиша: выйти (код остается в $C000)
+            bmi yz_out
+    endif
+            lda yz_end
+            bne yz_tl
+            ldx #0
+yz_ch       lda yz_wait,x
+            bne yz_dec
+            jsr yz_parse
+            lda yz_end          ; конец - в первом потоке, до остальных
+            bne yz_tl
+yz_dec      dec yz_wait,x
+    if F_TD
+            cpx #yz_nt2
+            bcs yz_chd
+            jsr yz_tone
+            jmp yz_next
+yz_chd      jsr yz_drum
+    else
+    if F_TONES
+            jsr yz_tone
+    else
+            jsr yz_drum
+    endif
+    endif
+yz_next     inx
+            inx
+            cpx #yz_nch2
+            bne yz_ch
+            beq yz_tick
+yz_tl
+    if F_TAIL
+            jsr yz_tailt
+            bcc yz_tick
+    endif
+yz_out      jsr yz_stop         ; выход: стоп, тишина, флаг сброшен
+            lda #$80
+            sta yz_card+7
+    if F_SAVEZP
+            ldx #yz_zpn-1       ; нулевая страница вызвавшего - на место
+yz_zr       lda yz_zsave,x
+            sta yz_ptr,x
+            dex
+            bpl yz_zr
+    endif
+            plp
+            rts
+
+; --- Стоп счета и тишина в каналах 1-7 ---
+yz_stop     lda #$C0
+            sta yz_card+15
+            lda #0
+            ldx #6
+yz_sl       sta yz_card+8,x
+            dex
+            bpl yz_sl
+            rts
+
+; --- Байт потока канала X ---
+yz_getb     lda (yz_chp,x)
+            inc yz_chp,x
+            bne yz_gb
+            inc yz_chp+1,x
+yz_gb       rts
+
+; --- Разбор: команды до ноты или паузы ---
+yz_parse    jsr yz_getb
+            cmp #$E0
+            bcs yz_pcmd
+            pha
+            lsr a
+            lsr a
+            lsr a
+            lsr a
+            lsr a
+            tay
+            lda yz_durt,y
+            sta yz_wait,x
+            pla
+            and #$1F
+yz_pnote    cmp #$1F            ; 31 - пауза
+            beq yz_pr
+            sta yz_note,x
+            lda #2
+            sta yz_pend,x
+yz_pr       rts
+yz_pcmd     cmp #$F0
+            bcs yz_pc2
+            and #$0F            ; $E0+i: инструмент
+            sta yz_pins,x
+            bcc yz_parse
+yz_pc2
+    if F_LONG
+            bne yz_pc3
+            jsr yz_getb         ; $F0 n d
+            pha
+            jsr yz_getb
+            sta yz_wait,x
+            pla
+            bpl yz_pnote
+yz_pc3
+    endif
+    if F_CALL
+            cmp #$F1
+            bne yz_pc4
+            jsr yz_getb         ; $F1 адрес
+            pha
+            jsr yz_getb
+            tay
+            lda yz_chp,x
+            sta yz_ret,x
+            lda yz_chp+1,x
+            sta yz_ret+1,x
+            pla
+            sta yz_chp,x
+            sty yz_chp+1,x
+            jmp yz_parse
+yz_pc4      cmp #$F2
+            bne yz_pc5
+            lda yz_ret,x        ; $F2: возврат
+            sta yz_chp,x
+            lda yz_ret+1,x
+            sta yz_chp+1,x
+            bne yz_parse
+yz_pc5
+    endif
+    if F_OFF
+            cmp #$F3
+            bne yz_pc6
+    if F_DOFF
+            cpx #yz_nt2
+            bcs yz_doff
+    endif
+    if F_TONES
+            lda yz_state,x      ; $F3: отпустить звучащую
+            cmp #1
+            bne yz_pj
+            jsr yz_rel
+yz_pj       jmp yz_parse
+    endif
+yz_pc6
+    endif
+    if F_CUT
+            cmp #$F4
+            bne yz_pc7
+    if F_DOFF
+            cpx #yz_nt2
+            bcs yz_doff
+    endif
+    if F_TONES
+            lda #0              ; $F4: заглушить
+            sta yz_state,x
+            jsr yz_rout
+            jmp yz_parse
+    endif
+yz_pc7
+    endif
+    if F_LEG
+            cmp #$F5
+            bne yz_pc8
+            lda #1              ; $F5: следующая нота - лигой
+            sta yz_leg,x
+            jmp yz_parse
+yz_pc8
+    endif
+    if F_TEMPO
+            cmp #$F6
+            bne yz_pc9
+            jsr yz_getb         ; $F6 N
+            sta yz_card+6
+            lda #0
+            sta yz_card+6
+            jmp yz_parse
+yz_pc9
+    endif
+    if F_PER
+            cmp #$F7
+            bne yz_pc10
+            jsr yz_getb         ; $F7 n: период словаря сейчас (без удара)
+            jsr yz_wper
+            jmp yz_parse
+yz_pc10
+    endif
+            inc yz_end          ; $FF
+            rts
+    if F_DOFF
+yz_doff     lda #0              ; ударный: отменить удар, пресет с D4 = 0
+            sta yz_pend,x
+            lda yz_lreg,x
+            ldy yz_ctab,x
+            sta yz_card,y
+            jmp yz_parse
+    endif
+
+    if F_TONES
+; --- Тоновый канал X: удар, огибающая, регистр ---
+yz_tone     lda yz_pend,x
+            beq yz_t1
+            dec yz_pend,x
+            bne yz_t1
+            lda yz_pins,x       ; удар: инструмент, период
+            sta yz_ins,x
+            lda yz_note,x
+            jsr yz_wper
+    if F_LEG
+            lda yz_leg,x
+            beq yz_tf
+            lda #0
+            sta yz_leg,x
+            lda yz_state,x      ; лига по звучащей ноте: огибающая идет дальше
+            cmp #1
+            beq yz_t1
+yz_tf
+    endif
+            lda #1
+            sta yz_state,x
+            jsr yz_setip
+            ldy #1
+            jsr yz_envs
+            jmp yz_t2
+yz_t1       lda yz_state,x
+            beq yz_tr
+            jsr yz_setip
+yz_t2       jsr yz_envst
+            ldy yz_pend,x       ; новая нота на подходе: D4 = 0
+            beq yz_rout
+    if F_LEG
+            ldy yz_leg,x
+            bne yz_rout
+    endif
+            and #$EF
+yz_rout     cmp yz_lreg,x       ; регистр канала - только изменение
+            beq yz_tr
+            sta yz_lreg,x
+            ldy yz_ctab,x
+            sta yz_card,y
+yz_tr       rts
+
+; --- Период A (индекс словаря) в счетчик канала X - только изменение ---
+yz_wper     cmp yz_lnote,x
+            beq yz_wr
+            sta yz_lnote,x
+            tay
+            lda yz_pdhi,y
+            pha
+            lda yz_pdlo,y
+            ldy yz_ctab+1,x
+            sta yz_card,y
+            pla
+            sta yz_card,y
+yz_wr       rts
+
+; --- yz_ip = запись инструмента канала X ---
+yz_setip    lda yz_ins,x
+            asl a
+            tay
+            lda yz_itab,y
+            sta yz_ip
+            lda yz_itab+1,y
+            sta yz_ip+1
+            rts
+
+; --- Отпустить: огибающая отпускания ---
+yz_rel      lda #2
+            sta yz_state,x
+            jsr yz_setip
+            ldy #0
+            lda (yz_ip),y
+            tay
+; --- Огибающая с пары Y: пары (тиков, значение), конец - (0, смещение повтора) ---
+yz_envs     lda (yz_ip),y
+            sta yz_ec,x
+            tya
+            sta yz_eo,x
+            rts
+
+; --- Шаг огибающей: A = значение регистра ---
+yz_envst    ldy yz_eo,x
+            iny
+            lda (yz_ip),y
+            pha
+            dec yz_ec,x
+            bne yz_er
+            iny
+            lda (yz_ip),y
+            bne yz_es
+            iny
+            lda (yz_ip),y
+            tay
+            lda (yz_ip),y
+yz_es       sta yz_ec,x
+            tya
+            sta yz_eo,x
+yz_er       pla
+            rts
+    endif
+
+    if F_DRUMS
+; --- Ударный канал X: в тик разбора пресет с D4 = 0, в следующий - удар ---
+yz_drum     lda yz_pend,x
+            beq yz_dr
+            dec yz_pend,x
+            lda yz_note,x
+            ldy yz_pend,x
+            bne yz_dw
+            sta yz_lreg,x       ; пресет удара - для отпускания
+            ora #$10
+yz_dw       ldy yz_ctab,x
+            sta yz_card,y
+yz_dr       rts
+    endif
+
+    if F_TAIL
+; --- Тик хвоста: ноты отпускаются; C = 1 - хвост кончился ---
+yz_tailt
+    if F_TONES
+            ldx #0
+yz_tt       lda yz_state,x
+            cmp #1
+            bne yz_tt1
+            jsr yz_rel
+yz_tt1      jsr yz_tone
+            inx
+            inx
+            cpx #yz_nt2
+            bne yz_tt
+    endif
+            inc yz_tail
+            lda yz_tail
+            cmp #yz_tailn
+            rts
+    endif
+
+yz_cw       db $36,$76,$B6

@@ -1,0 +1,135 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Варианты B и E: поток записей в регистры ячейки по тикам (снят с модели).
+; Данные мелодии (за JSR): [N, если YZ_HDR_N], поток.
+; B1 (B_DENSE = 0):
+;   $00-$0F v       записать v в регистр +r
+;   $80+n           конец тика и n пустых тиков (n = 0-126)
+;   $FF             конец мелодии
+; B2 (B_DENSE = 1) - то же, плюс словари игры:
+;   $00-$0F v       записать v в +r ($0F при B_REF - ссылка, ниже)
+;   01 ccc vvv      регистр канала ccc (+8+ccc) = rv_t[vvv]
+;   10 ccc 000 i    период канала ccc = pd_lo/pd_hi[i]
+;   $C0+n           конец тика и n пустых (n = 0-62); $FF - конец мелодии
+; E (B_REF = 1): $0F адрес-1 n - сыграть n байт потока с адреса и вернуться
+; (один уровень, источник - без ссылок).
+
+yzplay      pla
+            sta yzp
+            pla
+            sta yzp+1
+            php
+            sei
+    if YZ_HDR_N
+            jsr getb
+    else
+            lda #YZ_N
+    endif
+            jsr yz_start
+    if B_REF
+            lda #0
+            sta left
+    endif
+
+rp_tick     jsr yz_wait
+rp_cmd      jsr getb
+    if B_DENSE
+            cmp #$C0
+            bcs rp_eot
+            cmp #$40
+            bcc rp_raw
+            cmp #$80
+            bcs rp_per
+            pha                 ; 01 ccc vvv
+            and #7
+            tay
+            lda rv_t,y
+            sta t0
+            pla
+            lsr a
+            lsr a
+            lsr a
+            and #7
+            tay
+            lda t0
+            sta YZ_CARD+8,y
+            jmp rp_cmd
+rp_per      lsr a               ; 10 ccc 000 i
+            lsr a
+            lsr a
+            and #7
+            tax
+            lda cnt_t,x
+            tax
+            jsr getb
+            tay
+            lda pd_lo,y
+            sta YZ_CARD,x
+            lda pd_hi,y
+            sta YZ_CARD,x
+            jmp rp_cmd
+    else
+            cmp #$80
+            bcs rp_eot
+    endif
+rp_raw
+    if B_REF
+            cmp #$0F
+            beq rp_ref
+    endif
+            tax
+            jsr getb
+            sta YZ_CARD,x
+            jmp rp_cmd
+rp_eot      cmp #$FF
+            beq rp_end
+    if B_DENSE
+            and #$3F
+    else
+            and #$7F
+    endif
+            tax
+            beq rp_tick
+rp_idle     jsr yz_wait
+            dex
+            bne rp_idle
+            beq rp_tick
+rp_end      jmp yz_exit
+
+    if B_REF
+rp_ref      jsr getb            ; адрес - 1 и число байт
+            sta t0
+            jsr getb
+            sta t1
+            jsr getb
+            sta left
+            lda yzp
+            sta rsav
+            lda yzp+1
+            sta rsav+1
+            lda t0
+            sta yzp
+            lda t1
+            sta yzp+1
+            jmp rp_cmd
+    endif
+
+; --- Следующий байт потока (yzp указывает на прочитанный) ---
+getb        inc yzp
+            bne gb_1
+            inc yzp+1
+gb_1        ldy #0
+            lda (yzp),y
+    if B_REF
+            ldy left            ; в ссылке: последний байт - возврат
+            beq gb_r
+            dec left
+            bne gb_r
+            ldy rsav
+            sty yzp
+            ldy rsav+1
+            sty yzp+1
+gb_r
+    endif
+            rts

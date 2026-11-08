@@ -1,0 +1,141 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Вариант D: нотный поток каждого занятого канала, кадров нет. Время - в тиках.
+; Данные мелодии (за JSR): [N, если YZ_HDR_N] и по слову на канал - адрес потока.
+; Поток канала:
+;   ddd nnnnn ($00-$DF)  нота nnnnn словаря периодов (31 - пауза), длительность
+;                        dur_t[ddd] тиков
+;   $E0+i                инструмент i для следующих нот
+;   $F0 n d              нота n (31 - пауза), d тиков (D_LONG)
+;   $F1 адрес            вызов фразы (D_CALL, один уровень)
+;   $F2                  возврат из фразы
+;   $FF                  конец мелодии - только в потоке первого канала
+; Длительность - до следующего разбора этого канала; пауза ничего не меняет
+; (нота звучит дальше). Удар - через тик после разбора (tone.a65), как у
+; движка Студии.
+
+yzplay      pla
+            sta yzp
+            pla
+            sta yzp+1
+            php
+            sei
+    if YZ_HDR_N
+            ldy #1
+            lda (yzp),y
+            iny
+    else
+            lda #YZ_N
+            ldy #1
+    endif
+            jsr yz_start
+            ldx #0
+dh_l        lda (yzp),y         ; адреса потоков каналов
+            sta chp,x
+            iny
+            lda (yzp),y
+            sta chp+1,x
+            iny
+            inx
+            inx
+            cpx #2*NCH
+            bne dh_l
+            jsr ch_init
+            lda #0
+            sta ended
+            sta tail
+
+dp_tick     jsr yz_wait
+            lda ended
+            bne dp_tail
+            ldx #0
+dp_ch       lda c_wait,x
+            bne dp_dec
+            jsr parse
+            lda ended           ; конец - у первого канала, до остальных
+            bne dp_tail
+dp_dec      dec c_wait,x
+            jsr tone
+            inx
+            inx
+            cpx #2*NCH
+            bne dp_ch
+            beq dp_tick
+dp_tail
+    if YZ_TAIL
+            jsr tail_tick
+            bcc dp_tick
+    endif
+            jmp yz_exit
+
+; --- Байт потока канала X ---
+getb        lda (chp,x)
+            inc chp,x
+            bne gb_r
+            inc chp+1,x
+gb_r        rts
+
+; --- Разбор: команды до ноты или паузы ---
+parse       jsr getb
+            cmp #$E0
+            bcs pa_cmd
+            pha
+            lsr a
+            lsr a
+            lsr a
+            lsr a
+            lsr a
+            tay
+            lda dur_t,y
+            sta c_wait,x
+            pla
+            and #$1F
+pa_note     cmp #$1F            ; 31 - пауза
+            beq pa_r
+            sta c_note,x
+            lda #2
+            sta c_pend,x
+pa_r        rts
+pa_cmd      cmp #$F0
+            bcs pa_c2
+            and #$0F            ; $E0+i: инструмент
+            sta c_pins,x
+            bcc parse
+pa_c2
+    if D_LONG
+            bne pa_c3
+            jsr getb            ; $F0 n d
+            pha
+            jsr getb
+            sta c_wait,x
+            pla
+            bpl pa_note
+pa_c3
+    endif
+    if D_CALL
+            cmp #$F1
+            bne pa_c4
+            jsr getb            ; $F1 адрес
+            pha
+            jsr getb
+            tay
+            lda chp,x
+            sta c_ret,x
+            lda chp+1,x
+            sta c_ret+1,x
+            pla
+            sta chp,x
+            sty chp+1,x
+            jmp parse
+pa_c4       cmp #$F2
+            bne pa_end
+            lda c_ret,x         ; $F2: возврат
+            sta chp,x
+            lda c_ret+1,x
+            sta chp+1,x
+            bne parse
+pa_end
+    endif
+            inc ended           ; $FF
+            rts

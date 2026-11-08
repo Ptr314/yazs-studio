@@ -1,0 +1,129 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Тоновый канал вариантов C и D: то же, что tone_tick/note_on движка
+; (player/engine.a65, studio/pyplay.py) для мелодий без движения высоты и без
+; эффектов регистра. X = 2 * канал (массивы c_* - через байт).
+;
+; - Разбор ставит c_note (индекс словаря периодов pd_lo/pd_hi) и c_pend = 2:
+;   в этом тике у звучащей ноты D4 = 0, в следующем - удар (note_on).
+; - c_pins - инструмент следующих нот, c_ins - звучащей.
+; - Огибающая - RLE в записи инструмента:
+;     +0       смещение огибающей отпускания;
+;     +1...    пары (тиков, значение регистра), конец - (0, смещение пары повтора).
+;   c_eo - смещение текущей пары, c_ec - сколько тиков ей осталось.
+; - Регистр и период пишутся, только когда изменились (как в модели). Периоды
+;   словаря разные, поэтому период сравнивается по индексу: c_lnote.
+
+; --- Тик канала X ---
+tone        lda c_pend,x
+            beq to_1
+            dec c_pend,x
+            bne to_1
+            ; удар: инструмент, период, огибающая сначала
+            lda c_pins,x
+            sta c_ins,x
+            lda c_note,x
+            cmp c_lnote,x
+            beq no_r
+            sta c_lnote,x
+            tay
+            lda pd_hi,y
+            pha
+            lda pd_lo,y
+            ldy ch_tab+1,x
+            sta YZ_CARD,y
+            pla
+            sta YZ_CARD,y
+no_r        lda #1
+            sta c_state,x
+            jsr set_ip
+            ldy #1
+            jsr env_start
+            jmp to_2
+to_1        lda c_state,x
+            beq to_r
+            jsr set_ip
+to_2        jsr env_step
+            ldy c_pend,x        ; новая нота на подходе: D4 = 0
+            beq to_3
+            and #$EF
+to_3        cmp c_lreg,x
+            beq to_r
+            sta c_lreg,x
+            ldy ch_tab,x
+            sta YZ_CARD,y
+to_r        rts
+
+; --- ip = запись инструмента канала X ---
+set_ip      ldy c_ins,x
+            lda in_lo,y
+            sta ip
+            lda in_hi,y
+            sta ip+1
+            rts
+
+; --- Огибающая с пары Y ---
+env_start   lda (ip),y
+            sta c_ec,x
+            tya
+            sta c_eo,x
+            rts
+
+; --- Шаг огибающей: A = значение регистра ---
+env_step    ldy c_eo,x
+            iny
+            lda (ip),y
+            pha
+            dec c_ec,x
+            bne es_r
+            iny
+            lda (ip),y          ; тиков следующей пары
+            bne es_set
+            iny                 ; конец: к паре повтора
+            lda (ip),y
+            tay
+            lda (ip),y
+es_set      sta c_ec,x
+            tya
+            sta c_eo,x
+es_r        pla
+            rts
+
+; --- Состояние каналов перед мелодией: c_pend, c_state, c_lreg, c_wait (подряд)
+; = 0, c_lnote = $FF (период еще не писался) ---
+ch_init     ldx #4*2*NCH-1
+            lda #0
+ci_z        sta c_pend,x
+            dex
+            bpl ci_z
+            ldx #2*NCH-1
+            lda #$FF
+ci_f        sta c_lnote,x
+            dex
+            bpl ci_f
+            rts
+
+    if YZ_TAIL
+; --- Тик хвоста: после конца ноты отпускаются, YZ_TAIL тиков (ui.a65: 100).
+; C = 1 - хвост кончился
+tail_tick   ldx #0
+tl_ch       lda c_state,x
+            cmp #1
+            bne tl_1
+            inc c_state,x       ; отпустить: огибающая отпускания
+            jsr set_ip
+            ldy #0
+            lda (ip),y
+            tay
+            jsr env_start
+tl_1        jsr tone
+            inx
+            inx
+            cpx #2*NCH
+            bne tl_ch
+            inc tail
+            lda tail
+            cmp #YZ_TAIL
+            rts
+    endif

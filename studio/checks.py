@@ -11,10 +11,13 @@
 4. плеер на 6502 в эмуляторе против модели (verify.py): test_fx (все команды
    и эффекты, v1) и блюз в v2 с паттернами в блоке. Нужен eCat3 (docs/ecat3.md);
 5. запуск плеера из «Быстропускалки» и по BRUN из ДОС, выход к запустившему
-   (brun.py). Нужен еще системный диск ИКП из eCat3.
+   (brun.py). Нужен еще системный диск ИКП из eCat3;
+6. встраиваемый плеер (yz2asm.py): наборы мелодий score/test_embed.py с разными
+   возможностями плеера собираются AS65 и играют на 6502 против модели (без
+   eCat3; идет и с --quick).
 
     python studio/checks.py [--quick] [--update]
-    --quick   только 1-2 (без эмулятора и тестов процессора)
+    --quick   только 1, 2 и 6 (без эмулятора и тестов процессора)
     --update  записать новые суммы партитур (после намеренной правки)
 """
 
@@ -71,6 +74,42 @@ def check_sums(update, datas):
     return not [m for m in bad if m not in new]
 
 
+def check_embed():
+    """Встраиваемый плеер (yz2asm.py): наборы из score/test_embed.py, у каждого -
+    свои возможности плеера (шаблон player/yzplay.a65 собирается по-разному);
+    каждый набор собирает AS65 и проигрывает на 6502 против модели"""
+    import importlib.util
+    out = os.path.join(render.OUT, "checks", "embed")
+    os.makedirs(out, exist_ok=True)
+    sys.path.insert(0, os.path.join(HERE, "score"))
+    spec = importlib.util.spec_from_file_location("test_embed", os.path.join(HERE, "score", "test_embed.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    f = {}
+    for name in ("song", "boom", "blip", "slide", "vib"):
+        f[name] = os.path.join(out, name + ".yz")
+        with open(f[name], "wb") as fh:
+            fh.write(getattr(mod, name)().build())
+    sets = [
+        (["song", "boom", "blip", "slide"], ["--key", "--save-zp"]),     # все возможности
+        (["song"], ["--no-tail", "--plain"]),
+        (["boom"], ["--save-zp", "--zp", "$D0", "--org", "$8000"]),   # только ударные; как из Бейсика
+        (["blip"], ["--no-phrases"]),                      # один тоновый канал
+        (["slide"], []),                                   # лиги и период без TEMPO
+        (["vib"], ["--no-tail"]),                          # период каждый тик
+    ]
+    bad = []
+    for names, keys in sets:
+        dst = os.path.join(out, "_".join(names) + ".a65")
+        code, text = run(["yz2asm.py"] + [f[n] for n in names] + ["-o", dst] + keys)
+        if code != 0 or "проверка на 6502: все" not in text:
+            bad.append("%s %s: %s" % ("+".join(names), " ".join(keys), text.strip().splitlines()[-1:]))
+    print("[6] встраиваемый плеер (yz2asm): наборов %d, ошибок %d" % (len(sets), len(bad)))
+    for line in bad:
+        print("    " + line)
+    return not bad
+
+
 def run(cmd):
     r = subprocess.run([sys.executable] + cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return r.returncode, r.stdout.decode("utf-8", errors="replace")
@@ -84,6 +123,7 @@ def main():
     bad = sum(not test_v2.check(m) for m in modules())
     print("[2] v1/v2 на модели: расхождений %d" % bad)
     ok &= bad == 0
+    ok &= check_embed()
     if not quick:
         code, text = run([os.path.join("sid", "test_cpu.py")])
         print("[3] процессор SID:", "OK" if code == 0 else "ОШИБКА\n" + text)

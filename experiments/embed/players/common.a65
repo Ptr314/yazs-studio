@@ -1,0 +1,56 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Part of the YAZS Studio project: https://github.com/Ptr314/yazs-studio
+;
+; Встраиваемый плеер (опыт experiments/embed): общая часть всех вариантов -
+; ячейка, тик, выход. Повторяет card_init/set_timer/wait_tick/card_off плеера
+; Студии (player/player.a65) без слота в переменной: YZ_CARD - константа сборки.
+;
+; Вход мелодии у всех вариантов одинаковый: tune_N jsr yzplay, данные - сразу за
+; JSR. yzplay снимает адрес возврата (данные - 1) в yzp, делает PHP/SEI, а выход
+; (yz_exit) - PLP/RTS к тому, кто позвал tune_N.
+
+; Ячейка: стоп счета, тишина, режим 3 всем шести счетчикам; таймер A = N
+; (тик 7980 / N Гц), пуск счета, сброс флага. Y не портит
+yz_start    pha
+            jsr yz_stop
+            ldx #2
+yi_cw       lda yz_cw,x
+            sta YZ_CARD+3
+            sta YZ_CARD+7
+            dex
+            bpl yi_cw
+            pla
+yz_timer    sta YZ_CARD+6
+            lda #0
+            sta YZ_CARD+6
+            lda #$40            ; счет и таймер, внешнее прерывание запрещено
+            sta YZ_CARD+15
+            lda #$80            ; сброс флага (защелка счетчика 2)
+            sta YZ_CARD+7
+            rts
+
+; Ждать тик опросом флага (портит A)
+yz_wait     lda YZ_CARD
+            bpl yz_wait
+            lda #$80
+            sta YZ_CARD+7
+            rts
+
+; Стоп счета и тишина в каналах 1-7 (портит A, X)
+yz_stop     lda #$C0
+            sta YZ_CARD+15
+            lda #0
+            ldx #6
+ys_l        sta YZ_CARD+8,x
+            dex
+            bpl ys_l
+            rts
+
+; Выход: тишина, флаг сброшен, P - как до входа, RTS к вызвавшему мелодию
+yz_exit     jsr yz_stop
+            lda #$80
+            sta YZ_CARD+7
+            plp
+            rts
+
+yz_cw       db $36,$76,$B6
